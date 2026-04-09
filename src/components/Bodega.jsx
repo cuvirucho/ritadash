@@ -1,6 +1,6 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import "./Bodega.css";
-import { doc, setDoc } from "firebase/firestore";
+import { doc, setDoc, getDoc } from "firebase/firestore";
 import { db } from "../firbase/Firebase";
 const UNIDADES = [
   { value: "g", label: "Gramos (g)" },
@@ -10,7 +10,6 @@ const UNIDADES = [
 
 function Bodega() {
   const [ingredientes, setIngredientes] = useState(() => {
-    // Cargar desde localStorage si existe
     try {
       const data = localStorage.getItem("bodega_ingredientes");
       return data ? JSON.parse(data) : [];
@@ -18,8 +17,31 @@ function Bodega() {
       return [];
     }
   });
-  // Guardar en localStorage cada vez que ingredientes cambia
 
+  // Si no hay datos en localStorage, traerlos de Firebase
+  useEffect(() => {
+    const cargarDesdeFirebase = async () => {
+      if (ingredientes.length > 0) return;
+      try {
+        const snap = await getDoc(doc(db, "bodega", "mi_bodega"));
+        if (snap.exists()) {
+          const data = snap.data();
+          if (data.ingredientes && data.ingredientes.length > 0) {
+            setIngredientes(data.ingredientes);
+            localStorage.setItem(
+              "bodega_ingredientes",
+              JSON.stringify(data.ingredientes),
+            );
+          }
+        }
+      } catch (error) {
+        console.error("Error cargando desde Firebase:", error);
+      }
+    };
+    cargarDesdeFirebase();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Guardar en localStorage cada vez que ingredientes cambia
   useEffect(() => {
     const guardarDatos = async () => {
       try {
@@ -44,6 +66,35 @@ function Bodega() {
   /**/
 
   const [busqueda, setBusqueda] = useState("");
+
+  // Función para verificar y actualizar lista de compras
+  const actualizarListaCompras = useCallback((listaIngredientes) => {
+    const compras = listaIngredientes
+      .filter(
+        (i) => i.cantidadOriginal && i.cantidad <= i.cantidadOriginal * 0.25,
+      )
+      .map((i) => ({
+        id: i.id,
+        nombre: i.nombre,
+        cantidadActual: i.cantidad,
+        cantidadOriginal: i.cantidadOriginal,
+        cantidadComprar: i.cantidadOriginal - i.cantidad,
+        unidad: i.unidad,
+        costoPorUnidad: i.costoPorUnidad,
+        costoPaquete: i.costoTotal,
+      }));
+    localStorage.setItem("lista_compras", JSON.stringify(compras));
+
+    setDoc(doc(db, "compras", "lista_compras"), {
+      items: compras,
+      updatedAt: new Date(),
+    }).catch((error) => console.error(error));
+  }, []);
+
+  // Actualizar lista de compras cuando cambian los ingredientes
+  useEffect(() => {
+    actualizarListaCompras(ingredientes);
+  }, [ingredientes, actualizarListaCompras]);
 
   // Form state
   const [nombre, setNombre] = useState("");
@@ -101,6 +152,7 @@ function Bodega() {
       id: Date.now().toString() + Math.random().toString(36).slice(2),
       nombre: nombre.trim(),
       cantidad: cantNum,
+      cantidadOriginal: cantNum,
       costoTotal: costoTotalNum,
       costoPorUnidad,
       unidad,
@@ -117,6 +169,19 @@ function Bodega() {
   // Eliminar ingrediente (local)
   const handleDelete = (id) => {
     setIngredientes((ings) => ings.filter((i) => i.id !== id));
+  };
+
+  // Consumir stock
+  const handleConsumir = (id, cantidadConsumir) => {
+    const cant = parseFloat(cantidadConsumir);
+    if (!cant || cant <= 0) return;
+    setIngredientes((ings) =>
+      ings.map((i) => {
+        if (i.id !== id) return i;
+        const nuevaCantidad = Math.max(0, i.cantidad - cant);
+        return { ...i, cantidad: nuevaCantidad };
+      }),
+    );
   };
 
   // Edición de ingredientes
@@ -172,6 +237,7 @@ function Bodega() {
               ...i,
               nombre: editNombre.trim(),
               cantidad: cantNum,
+              cantidadOriginal: i.cantidadOriginal || cantNum,
               costoTotal: costoTotalNum,
               costoPorUnidad,
               unidad: editUnidad,
@@ -333,142 +399,223 @@ function Bodega() {
                   <th>Unidad</th>
                   <th>Costo/Unidad</th>
                   <th>Costo paquete</th>
+                  <th>Stock</th>
                   <th></th>
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((ing, i) =>
-                  editId === ing.id ? (
-                    <tr key={ing.id} className="editing-row">
-                      <td data-label="#">{i + 1}</td>
-                      <td data-label="Nombre" className="td-name">
-                        <input
-                          type="text"
-                          value={editNombre}
-                          onChange={(e) => setEditNombre(e.target.value)}
-                          required
-                        />
-                      </td>
-                      <td data-label="Cantidad" className="td-qty">
-                        <input
-                          type="number"
-                          step="any"
-                          min="0"
-                          value={editCantidad}
-                          onChange={(e) => setEditCantidad(e.target.value)}
-                          required
-                        />
-                      </td>
-                      <td data-label="Unidad">
-                        <select
-                          value={editUnidad}
-                          onChange={(e) => setEditUnidad(e.target.value)}
-                        >
-                          {UNIDADES.map((u) => (
-                            <option key={u.value} value={u.value}>
-                              {u.label}
-                            </option>
-                          ))}
-                        </select>
-                      </td>
-                      <td data-label="Costo/Unidad" className="td-cost">
-                        $
-                        {editCostoPorUnidad !== undefined
-                          ? editCostoPorUnidad < 0.01 && editCostoPorUnidad > 0
-                            ? "0.01"
-                            : editCostoPorUnidad.toFixed(2)
-                          : "0.00"}{" "}
-                        {costoLabel(editUnidad)}
-                        {editCostoPorUnidad !== undefined &&
-                          editCostoPorUnidad === 0.01 &&
-                          " (mínimo)"}
-                      </td>
-                      <td data-label="Costo paquete" className="td-cost">
-                        <input
-                          type="number"
-                          step="any"
-                          min="0"
-                          value={editCostoTotal}
-                          onChange={(e) => setEditCostoTotal(e.target.value)}
-                          required
-                        />
-                      </td>
-                      <td data-label="Acciones">
-                        <button
-                          className="btn-save"
-                          title="Guardar"
-                          onClick={handleEditSave}
-                          disabled={
-                            editSaving ||
-                            !editNombre.trim() ||
-                            !editCantidad ||
-                            !editCostoTotal
-                          }
-                        >
-                          💾
-                        </button>
-                        <button
-                          className="btn-cancel"
-                          title="Cancelar"
-                          onClick={handleEditCancel}
-                        >
-                          ❌
-                        </button>
-                      </td>
-                    </tr>
-                  ) : (
-                    <tr key={ing.id}>
-                      <td data-label="#">{i + 1}</td>
-                      <td data-label="Nombre" className="td-name">
-                        {ing.nombre}
-                      </td>
-                      <td data-label="Cantidad" className="td-qty">
-                        {ing.cantidad}
-                      </td>
-                      <td data-label="Unidad">
-                        <span className={`unit-badge ${ing.unidad}`}>
-                          {ing.unidad}
-                        </span>
-                      </td>
-                      <td data-label="Costo/Unidad" className="td-cost">
-                        $
-                        {ing.costoPorUnidad !== undefined
-                          ? ing.costoPorUnidad < 0.01 && ing.costoPorUnidad > 0
-                            ? "0.01"
-                            : ing.costoPorUnidad.toFixed(2)
-                          : "0.00"}{" "}
-                        {costoLabel(ing.unidad)}
-                        {ing.costoPorUnidad !== undefined &&
-                          ing.costoPorUnidad === 0.01 &&
-                          " (mínimo)"}
-                      </td>
-                      <td data-label="Costo paquete" className="td-cost">
-                        ${ing.costoTotal?.toFixed(2)}
-                      </td>
-                      <td data-label="Acciones">
-                        <button
-                          className="btn-edit"
-                          title="Editar"
-                          onClick={() => handleEdit(ing)}
-                        >
-                          ✏️
-                        </button>
-                        <button
-                          className="btn-delete"
-                          title="Eliminar"
-                          onClick={() => handleDelete(ing.id)}
-                        >
-                          🗑️
-                        </button>
-                      </td>
-                    </tr>
-                  ),
-                )}
+                {filtered.map((ing, i) => (
+                  <tr
+                    key={ing.id}
+                    className={editId === ing.id ? "row-editing-active" : ""}
+                  >
+                    <td data-label="#">{i + 1}</td>
+                    <td data-label="Nombre" className="td-name">
+                      {ing.nombre}
+                    </td>
+                    <td data-label="Cantidad" className="td-qty">
+                      {ing.cantidad}
+                    </td>
+                    <td data-label="Unidad">
+                      <span className={`unit-badge ${ing.unidad}`}>
+                        {ing.unidad}
+                      </span>
+                    </td>
+                    <td data-label="Costo/Unidad" className="td-cost">
+                      $
+                      {ing.costoPorUnidad !== undefined
+                        ? ing.costoPorUnidad < 0.01 && ing.costoPorUnidad > 0
+                          ? "0.01"
+                          : ing.costoPorUnidad.toFixed(2)
+                        : "0.00"}{" "}
+                      {costoLabel(ing.unidad)}
+                      {ing.costoPorUnidad !== undefined &&
+                        ing.costoPorUnidad === 0.01 &&
+                        " (mínimo)"}
+                    </td>
+                    <td data-label="Costo paquete" className="td-cost">
+                      ${ing.costoTotal?.toFixed(2)}
+                    </td>
+                    <td data-label="Stock">
+                      {ing.cantidadOriginal && (
+                        <div className="stock-cell">
+                          {ing.cantidad <= 0 ? (
+                            <span className="stock-urgent">
+                              ⚠️ Urgente comprar
+                            </span>
+                          ) : (
+                            <>
+                              <div className="stock-bar">
+                                <div
+                                  className={`stock-fill ${
+                                    ing.cantidad / ing.cantidadOriginal <= 0.25
+                                      ? "stock-low"
+                                      : ing.cantidad / ing.cantidadOriginal <=
+                                          0.5
+                                        ? "stock-mid"
+                                        : "stock-ok"
+                                  }`}
+                                  style={{
+                                    width: `${Math.min(100, (ing.cantidad / ing.cantidadOriginal) * 100)}%`,
+                                  }}
+                                />
+                              </div>
+                              <span className="stock-text">
+                                {Math.round(
+                                  (ing.cantidad / ing.cantidadOriginal) * 100,
+                                )}
+                                %
+                              </span>
+                              {ing.cantidad / ing.cantidadOriginal <= 0.25 && (
+                                <span className="stock-alert">🛒</span>
+                              )}
+                            </>
+                          )}
+                          <div className="stock-consume">
+                            <input
+                              type="number"
+                              min="0"
+                              step="any"
+                              placeholder="-"
+                              className="consume-input"
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  handleConsumir(ing.id, e.target.value);
+                                  e.target.value = "";
+                                }
+                              }}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </td>
+                    <td data-label="Acciones">
+                      <button
+                        className="btn-edit"
+                        title="Editar"
+                        onClick={() => handleEdit(ing)}
+                      >
+                        ✏️
+                      </button>
+                      <button
+                        className="btn-delete"
+                        title="Eliminar"
+                        onClick={() => handleDelete(ing.id)}
+                      >
+                        🗑️
+                      </button>
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           )}
         </div>
       </div>
+
+      {/* ── Modal de edición ── */}
+      {editId && (
+        <div className="edit-overlay" onClick={handleEditCancel}>
+          <div className="edit-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="edit-modal-header">
+              <h2>✏️ Editar Ingrediente</h2>
+              <button className="edit-modal-close" onClick={handleEditCancel}>
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleEditSave} className="edit-modal-form">
+              <div className="form-group">
+                <label>Nombre</label>
+                <input
+                  type="text"
+                  value={editNombre}
+                  onChange={(e) => setEditNombre(e.target.value)}
+                  autoFocus
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Unidad de medida</label>
+                <select
+                  value={editUnidad}
+                  onChange={(e) => setEditUnidad(e.target.value)}
+                >
+                  {UNIDADES.map((u) => (
+                    <option key={u.value} value={u.value}>
+                      {u.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Cantidad ({editUnidad})</label>
+                  <input
+                    type="number"
+                    step="any"
+                    min="0"
+                    value={editCantidad}
+                    onChange={(e) => setEditCantidad(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Costo total del paquete ($)</label>
+                  <input
+                    type="number"
+                    step="any"
+                    min="0"
+                    value={editCostoTotal}
+                    onChange={(e) => setEditCostoTotal(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+
+              {editCostoPorUnidad > 0 && (
+                <div className="cost-preview">
+                  Costo calculado:{" "}
+                  <strong>
+                    ${editCostoPorUnidad.toFixed(2)}
+                    {editCostoPorUnidad === 0.01 && " (mínimo)"}
+                  </strong>{" "}
+                  por{" "}
+                  {editUnidad === "g"
+                    ? "gramo"
+                    : editUnidad === "ml"
+                      ? "mililitro"
+                      : "unidad"}
+                </div>
+              )}
+
+              <div className="edit-modal-actions">
+                <button
+                  type="button"
+                  className="btn-modal-cancel"
+                  onClick={handleEditCancel}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="btn-modal-save"
+                  disabled={
+                    editSaving ||
+                    !editNombre.trim() ||
+                    !editCantidad ||
+                    !editCostoTotal
+                  }
+                >
+                  {editSaving ? "⏳ Guardando..." : "💾 Guardar cambios"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

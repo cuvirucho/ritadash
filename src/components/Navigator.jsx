@@ -5,12 +5,14 @@ import Menus from "./Menus";
 import Deliveries from "./Deliveries";
 import ControlIngresoGasto from "./ControlIngresoGasto";
 import "./Navigator.css";
+import Compras from "./Compras";
 
 const TABS = [
-  { key: "dashboard", label: "📊 Dashboard", component: Dashboard },
-  { key: "bodega", label: "📦 Bodega", component: Bodega },
   { key: "menus", label: "🍽️ Menús", component: Menus },
   { key: "deliveries", label: "🚚 Deliveries", component: Deliveries },
+  { key: "bodega", label: "📦 Bodega", component: Bodega },
+  { key: "compras", label: "🛒 Compras", component: Compras },
+  { key: "dashboard", label: "📊 Dashboard", component: Dashboard },
   {
     key: "control",
     label: "💰 Control de Ingreso y Gasto",
@@ -19,7 +21,7 @@ const TABS = [
 ];
 
 function Navigator() {
-  const [activeTab, setActiveTab] = useState("dashboard");
+  const [activeTab, setActiveTab] = useState("menus");
 
   const ActiveComponent =
     TABS.find((t) => t.key === activeTab)?.component || Dashboard;
@@ -41,7 +43,11 @@ function Navigator() {
         </ul>
       </nav>
       <main className="navigator-content">
-        <ActiveComponent />
+        {activeTab === "dashboard" || activeTab === "control" ? (
+          <ActiveComponent onClose={() => setActiveTab("menus")} />
+        ) : (
+          <ActiveComponent />
+        )}
       </main>
     </div>
   );

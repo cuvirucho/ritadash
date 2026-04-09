@@ -27,12 +27,15 @@ const loadCache = () => {
   }
 };
 
-function Dashboard() {
+function Dashboard({ onClose }) {
   const [allUsers, setAllUsers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [filtro, setFiltro] = useState("todos");
   const [page, setPage] = useState(1);
   const [busqueda, setBusqueda] = useState("");
+  const [autenticado, setAutenticado] = useState(false);
+  const [clave, setClave] = useState("");
+  const [claveError, setClaveError] = useState(false);
 
   // ── Una sola petición: traer TODO y cachear ──
   const fetchAll = async () => {
@@ -155,6 +158,15 @@ function Dashboard() {
   const getPhone = (u) =>
     u.datapayphone?.optionalParameter1 || u.datapayphone?.phoneNumber || "—";
 
+  const handleClaveSubmit = () => {
+    if (clave === "Lenaluchies1") {
+      setAutenticado(true);
+      setClaveError(false);
+    } else {
+      setClaveError(true);
+    }
+  };
+
   /*eliomartos*/
 
   const handleRefresh2 = () => {
@@ -165,6 +177,36 @@ function Dashboard() {
 
   return (
     <div className="dashboard">
+      {!autenticado && (
+        <div className="modal-overlay">
+          <div className="modal-clave">
+            <h2>🔒 Acceso restringido</h2>
+            <p>Ingresa la clave para continuar</p>
+            <input
+              type="password"
+              className="input-clave"
+              placeholder="Clave..."
+              value={clave}
+              onChange={(e) => {
+                setClave(e.target.value);
+                setClaveError(false);
+              }}
+              onKeyDown={(e) => e.key === "Enter" && handleClaveSubmit()}
+            />
+            {claveError && (
+              <span className="clave-error">Clave incorrecta</span>
+            )}
+            <button className="btn-clave" onClick={handleClaveSubmit}>
+              Ingresar
+            </button>
+            {onClose && (
+              <button className="btn-cerrar" onClick={onClose}>
+                Cerrar
+              </button>
+            )}
+          </div>
+        </div>
+      )}
       <header className="dashboard-header">
         <div className="header-row">
           <div>
@@ -221,15 +263,7 @@ function Dashboard() {
             <span className="card-value">{starterCount}</span>
           </div>
         </div>
-        <div className="card card-income">
-          <div className="card-icon">💰</div>
-          <div className="card-info">
-            <span className="card-label">Ingresos Totales</span>
-            <span className="card-value">
-              ${totalIngresos.toLocaleString()}
-            </span>
-          </div>
-        </div>
+
         <div className="card card-expired">
           <div className="card-icon">⚠️</div>
           <div className="card-info">

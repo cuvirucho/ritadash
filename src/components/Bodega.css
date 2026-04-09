@@ -45,9 +45,10 @@
 /* ── Layout dos columnas ── */
 .bodega-content {
   display: grid;
-  grid-template-columns: 380px 1fr;
+  grid-template-columns: 340px 1fr;
   gap: 1.5rem;
   align-items: start;
+  min-width: 0;
 }
 
 /* ── Formulario ── */
@@ -156,6 +157,8 @@
   border-radius: var(--radius);
   padding: 1.5rem;
   box-shadow: var(--shadow);
+  min-width: 0;
+  overflow-x: auto;
 }
 .bodega-list-header {
   display: flex;
@@ -208,25 +211,58 @@
 .ingredient-table {
   width: 100%;
   border-collapse: collapse;
+  table-layout: fixed;
 }
 .ingredient-table thead th {
-  font-size: 0.7rem;
+  font-size: 0.68rem;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.04em;
   color: var(--text-muted);
   font-weight: 500;
-  padding: 0.6rem 0.75rem;
+  padding: 0.5rem 0.45rem;
   text-align: left;
   border-bottom: 1px solid var(--border);
   position: sticky;
   top: 0;
   background: var(--surface);
+  white-space: nowrap;
+}
+.ingredient-table thead th:nth-child(1) {
+  width: 3%;
+}
+.ingredient-table thead th:nth-child(2) {
+  width: 22%;
+}
+.ingredient-table thead th:nth-child(3) {
+  width: 8%;
+}
+.ingredient-table thead th:nth-child(4) {
+  width: 7%;
+}
+.ingredient-table thead th:nth-child(5) {
+  width: 12%;
+}
+.ingredient-table thead th:nth-child(6) {
+  width: 12%;
+}
+.ingredient-table thead th:nth-child(7) {
+  width: 26%;
+}
+.ingredient-table thead th:nth-child(8) {
+  width: 10%;
 }
 .ingredient-table tbody td {
-  padding: 0.7rem 0.75rem;
-  font-size: 0.84rem;
+  padding: 0.55rem 0.45rem;
+  font-size: 0.8rem;
   border-bottom: 1px solid var(--border);
   vertical-align: middle;
+  white-space: nowrap;
+}
+.ingredient-table
+  tbody
+  td:not(.td-name):not([data-label="Acciones"]):not([data-label="Stock"]) {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .ingredient-table tbody tr {
   transition: background 0.15s;
@@ -240,6 +276,9 @@
 
 .td-name {
   font-weight: 500;
+  white-space: normal;
+  word-break: break-word;
+  min-width: 0;
 }
 .td-qty {
   font-variant-numeric: tabular-nums;
@@ -430,4 +469,311 @@
   .bodega-empty {
     padding: 2rem 0.5rem;
   }
+}
+
+/* ── Fila activa al editar ── */
+.row-editing-active {
+  background: var(--accent-bg) !important;
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+  border-radius: 6px;
+}
+
+/* ── Botón editar ── */
+.btn-edit {
+  background: none;
+  border: 1px solid transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0.3rem 0.5rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  transition: all 0.2s;
+}
+.btn-edit:hover {
+  color: var(--accent);
+  background: var(--accent-bg);
+  border-color: rgba(129, 140, 248, 0.2);
+}
+
+/* ── Modal overlay ── */
+.edit-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  animation: fadeIn 0.2s ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* ── Modal card ── */
+.edit-modal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  width: 100%;
+  max-width: 480px;
+  box-shadow:
+    0 20px 60px rgba(0, 0, 0, 0.3),
+    0 0 0 1px rgba(255, 255, 255, 0.05);
+  animation: slideUp 0.25s ease-out;
+  overflow: hidden;
+}
+
+.edit-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+}
+
+.edit-modal-header h2 {
+  font-size: 1.05rem;
+  font-weight: 700;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+.edit-modal-close {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+.edit-modal-close:hover {
+  background: var(--danger-bg);
+  color: var(--danger);
+  border-color: rgba(248, 113, 113, 0.3);
+}
+
+.edit-modal-form {
+  padding: 1.5rem;
+}
+
+.edit-modal-form .form-group {
+  margin-bottom: 1rem;
+}
+
+.edit-modal-form .form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+.edit-modal-form .cost-preview {
+  margin-top: 0.25rem;
+  margin-bottom: 1rem;
+}
+
+/* ── Botones del modal ── */
+.edit-modal-actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.btn-modal-cancel {
+  flex: 1;
+  padding: 0.7rem 1rem;
+  background: var(--surface-2);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.btn-modal-cancel:hover {
+  background: var(--surface);
+  color: var(--text);
+  border-color: var(--text-muted);
+}
+
+.btn-modal-save {
+  flex: 2;
+  padding: 0.7rem 1rem;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-modal-save:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(129, 140, 248, 0.35);
+}
+.btn-modal-save:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+/* ── Modal responsive ── */
+@media (max-width: 520px) {
+  .edit-overlay {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .edit-modal {
+    max-width: 100%;
+    border-radius: 20px 20px 0 0;
+    animation: slideUpMobile 0.3s ease-out;
+    max-height: 90vh;
+    overflow-y: auto;
+  }
+
+  @keyframes slideUpMobile {
+    from {
+      opacity: 0;
+      transform: translateY(100%);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .edit-modal-header {
+    padding: 1rem 1.25rem;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+  }
+
+  .edit-modal-form {
+    padding: 1.25rem;
+  }
+
+  .edit-modal-form .form-row {
+    grid-template-columns: 1fr;
+  }
+
+  .edit-modal-actions {
+    flex-direction: column-reverse;
+  }
+
+  .btn-modal-save,
+  .btn-modal-cancel {
+    padding: 0.85rem;
+    font-size: 0.9rem;
+  }
+}
+
+/* ── Stock bar ── */
+.stock-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+}
+.stock-bar {
+  width: 40px;
+  height: 5px;
+  background: var(--surface-2);
+  border-radius: 3px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.stock-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.3s;
+}
+.stock-fill.stock-ok {
+  background: var(--success, #22c55e);
+}
+.stock-fill.stock-mid {
+  background: #f59e0b;
+}
+.stock-fill.stock-low {
+  background: var(--danger, #ef4444);
+}
+.stock-text {
+  font-size: 0.72rem;
+  font-weight: 600;
+  min-width: 28px;
+}
+.stock-alert {
+  font-size: 0.8rem;
+}
+.stock-urgent {
+  background: #ff4d4f;
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.2rem 0.6rem;
+  border-radius: 6px;
+  animation: pulse-urgent 1.2s infinite;
+  white-space: nowrap;
+}
+@keyframes pulse-urgent {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+.stock-consume {
+  flex-shrink: 0;
+}
+.consume-input {
+  width: 42px;
+  padding: 0.15rem 0.25rem;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font-size: 0.75rem;
+  text-align: center;
+  outline: none;
+}
+.consume-input:focus {
+  border-color: var(--accent);
+}
+.consume-input::placeholder {
+  color: var(--text-muted);
+  opacity: 0.5;
 }
