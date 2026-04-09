@@ -1,0 +1,433 @@
+/* ── Bodega ── */
+.bodega {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 2.5rem 2rem;
+  color: var(--text);
+  font-family:
+    "Inter",
+    system-ui,
+    -apple-system,
+    sans-serif;
+  min-height: 100vh;
+}
+
+/* ── Header ── */
+.bodega-header {
+  margin-bottom: 2rem;
+}
+.bodega-header h1 {
+  font-size: 1.6rem;
+  font-weight: 700;
+  margin: 0;
+  letter-spacing: -0.02em;
+}
+.bodega-header .subtitle {
+  color: var(--text-muted);
+  margin: 0.3rem 0 0;
+  font-size: 0.85rem;
+}
+
+.btnfirbase {
+  padding: 0.65rem 1.2rem;
+  background: var(--income);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  width: 100%;
+  transition: all 0.2s;
+  margin-bottom: 10px;
+}
+
+/* ── Layout dos columnas ── */
+.bodega-content {
+  display: grid;
+  grid-template-columns: 380px 1fr;
+  gap: 1.5rem;
+  align-items: start;
+}
+
+/* ── Formulario ── */
+.bodega-form-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.5rem;
+  box-shadow: var(--shadow);
+  position: sticky;
+  top: 2rem;
+}
+.bodega-form-card h2 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0 0 1.25rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.bodega-form-card h2 span {
+  font-size: 1.2rem;
+}
+
+.form-group {
+  margin-bottom: 1rem;
+}
+.form-group label {
+  display: block;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  font-weight: 500;
+  margin-bottom: 0.4rem;
+}
+.form-group input,
+.form-group select {
+  width: 100%;
+  padding: 0.6rem 0.8rem;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 0.85rem;
+  transition: border-color 0.2s;
+  outline: none;
+  box-sizing: border-box;
+}
+.form-group input::placeholder {
+  color: var(--text-muted);
+  opacity: 0.6;
+}
+.form-group input:focus,
+.form-group select:focus {
+  border-color: var(--accent);
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+.cost-preview {
+  background: var(--accent-bg);
+  border: 1px solid rgba(129, 140, 248, 0.2);
+  border-radius: var(--radius-sm);
+  padding: 0.55rem 0.8rem;
+  font-size: 0.8rem;
+  color: var(--accent);
+  margin-bottom: 0.75rem;
+  text-align: center;
+}
+.cost-preview strong {
+  font-weight: 700;
+}
+
+.btn-add-ingredient {
+  width: 100%;
+  padding: 0.65rem;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-top: 0.5rem;
+}
+.btn-add-ingredient:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+.btn-add-ingredient:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* ── Lista de ingredientes ── */
+.bodega-list-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.5rem;
+  box-shadow: var(--shadow);
+}
+.bodega-list-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.25rem;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+.bodega-list-header h2 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.bodega-list-header h2 span {
+  font-size: 1.2rem;
+}
+
+.bodega-search {
+  padding: 0.5rem 0.8rem;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 0.8rem;
+  outline: none;
+  width: 220px;
+  transition: border-color 0.2s;
+}
+.bodega-search::placeholder {
+  color: var(--text-muted);
+  opacity: 0.6;
+}
+.bodega-search:focus {
+  border-color: var(--accent);
+}
+
+.ingredient-count {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  background: var(--surface-2);
+  padding: 0.25rem 0.65rem;
+  border-radius: 12px;
+}
+
+/* ── Tabla ingredientes ── */
+.ingredient-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.ingredient-table thead th {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  font-weight: 500;
+  padding: 0.6rem 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+}
+.ingredient-table tbody td {
+  padding: 0.7rem 0.75rem;
+  font-size: 0.84rem;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+.ingredient-table tbody tr {
+  transition: background 0.15s;
+}
+.ingredient-table tbody tr:hover {
+  background: var(--surface-hover);
+}
+.ingredient-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.td-name {
+  font-weight: 500;
+}
+.td-qty {
+  font-variant-numeric: tabular-nums;
+}
+.td-cost {
+  color: var(--success);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.unit-badge {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: 10px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.unit-badge.g {
+  background: var(--premium-bg);
+  color: var(--premium);
+}
+.unit-badge.ml {
+  background: var(--starter-bg);
+  color: var(--starter);
+}
+.unit-badge.ud {
+  background: var(--income-bg);
+  color: var(--income);
+}
+
+.btn-delete {
+  background: none;
+  border: 1px solid transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0.3rem 0.5rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  transition: all 0.2s;
+}
+.btn-delete:hover {
+  color: var(--danger);
+  background: var(--danger-bg);
+  border-color: rgba(248, 113, 113, 0.2);
+}
+
+/* ── Empty state ── */
+.bodega-empty {
+  text-align: center;
+  padding: 3rem 1rem;
+  color: var(--text-muted);
+}
+.bodega-empty .empty-icon {
+  font-size: 2.5rem;
+  margin-bottom: 0.75rem;
+}
+.bodega-empty p {
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+/* ── Cards resumen ── */
+.bodega-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+.bodega-stat {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem 1.25rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  box-shadow: var(--shadow);
+}
+.bodega-stat .stat-icon {
+  font-size: 1.5rem;
+}
+.bodega-stat .stat-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+.bodega-stat .stat-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+.bodega-stat .stat-value {
+  font-size: 1.35rem;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--accent);
+}
+
+/* ── Responsive ── */
+
+/* ── Mejoras móviles ── */
+@media (max-width: 860px) {
+  .bodega-content {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+  .bodega-form-card {
+    position: static;
+    margin-bottom: 1.5rem;
+    padding: 1rem;
+  }
+  .bodega-list-card {
+    padding: 1rem;
+  }
+  .bodega-stats {
+    grid-template-columns: 1fr;
+    gap: 0.7rem;
+  }
+  .bodega-header {
+    margin-bottom: 1.2rem;
+    padding: 0 0.5rem;
+  }
+}
+
+@media (max-width: 600px) {
+  .bodega {
+    padding: 1.2rem 0.3rem;
+  }
+  .bodega-header h1 {
+    font-size: 1.15rem;
+  }
+  .bodega-header .subtitle {
+    font-size: 0.75rem;
+  }
+  .bodega-form-card,
+  .bodega-list-card {
+    padding: 0.7rem 0.3rem;
+    border-radius: 10px;
+  }
+  .bodega-list-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.5rem;
+  }
+  .bodega-search {
+    width: 100%;
+    font-size: 0.9rem;
+  }
+  .ingredient-table thead {
+    display: none;
+  }
+  .ingredient-table tbody tr {
+    display: block;
+    margin-bottom: 1.1rem;
+    border-radius: 10px;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 0.7rem 0.5rem;
+  }
+  .ingredient-table tbody td {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.35rem 0;
+    border: none;
+    font-size: 0.97rem;
+  }
+  .ingredient-table tbody td:before {
+    content: attr(data-label);
+    font-weight: 600;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    margin-right: 0.5rem;
+  }
+  .ingredient-table tbody tr:last-child {
+    margin-bottom: 0;
+  }
+  .btn-delete {
+    font-size: 1.1rem;
+    padding: 0.2rem 0.4rem;
+  }
+  .bodega-empty {
+    padding: 2rem 0.5rem;
+  }
+}

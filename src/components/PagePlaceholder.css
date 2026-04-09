@@ -1,0 +1,22 @@
+.page-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
+  color: var(--text);
+  text-align: center;
+}
+.page-placeholder .page-icon {
+  font-size: 4rem;
+  margin-bottom: 1rem;
+}
+.page-placeholder h1 {
+  font-size: 1.8rem;
+  font-weight: 700;
+  margin: 0 0 0.5rem;
+}
+.page-placeholder p {
+  color: var(--text-muted);
+  font-size: 1rem;
+}
