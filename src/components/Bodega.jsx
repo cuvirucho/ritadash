@@ -9,39 +9,41 @@ const UNIDADES = [
 ];
 
 function Bodega() {
-  const [ingredientes, setIngredientes] = useState(() => {
-    try {
-      const data = localStorage.getItem("bodega_ingredientes");
-      return data ? JSON.parse(data) : [];
-    } catch {
-      return [];
-    }
-  });
+  const [ingredientes, setIngredientes] = useState([]);
 
-  // Si no hay datos en localStorage, traerlos de Firebase
+  // Cargar SIEMPRE desde Firebase al iniciar
   useEffect(() => {
     const cargarDesdeFirebase = async () => {
-      if (ingredientes.length > 0) return;
       try {
         const snap = await getDoc(doc(db, "bodega", "mi_bodega"));
         if (snap.exists()) {
           const data = snap.data();
           if (data.ingredientes && data.ingredientes.length > 0) {
             setIngredientes(data.ingredientes);
+            // Opcional: cache local
             localStorage.setItem(
               "bodega_ingredientes",
               JSON.stringify(data.ingredientes),
             );
+          } else {
+            setIngredientes([]);
+            localStorage.removeItem("bodega_ingredientes");
           }
+        } else {
+          setIngredientes([]);
+          localStorage.removeItem("bodega_ingredientes");
         }
       } catch (error) {
         console.error("Error cargando desde Firebase:", error);
+        setIngredientes([]);
       }
     };
     cargarDesdeFirebase();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    // Solo al montar
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  // Guardar en localStorage cada vez que ingredientes cambia
+  // Guardar en localStorage y Firebase cada vez que ingredientes cambia
   useEffect(() => {
     const guardarDatos = async () => {
       try {
@@ -49,13 +51,12 @@ function Bodega() {
           "bodega_ingredientes",
           JSON.stringify(ingredientes),
         );
-
         await setDoc(doc(db, "bodega", "mi_bodega"), {
           ingredientes: ingredientes,
           updatedAt: new Date(),
         });
       } catch (error) {
-        console.error(error);
+        console.error("Error guardando datos:", error);
       }
     };
 
