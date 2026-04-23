@@ -7,6 +7,7 @@ import {
   collection,
   addDoc,
   getDocs,
+  deleteDoc,
 } from "firebase/firestore";
 import { db } from "../firbase/Firebase";
 
@@ -14,6 +15,9 @@ function Compras() {
   const [compras, setCompras] = useState([]);
   const [gastos, setGastos] = useState([]);
   const [filtro, setFiltro] = useState("mes"); // "dia" o "mes"
+  const [modalItem, setModalItem] = useState(null); // item pendiente de confirmar
+  const [modalCantidad, setModalCantidad] = useState("");
+  const [modalCosto, setModalCosto] = useState("");
   const [fechaFiltro, setFechaFiltro] = useState(
     new Date().toISOString().slice(0, 10),
   );
@@ -21,62 +25,28 @@ function Compras() {
     new Date().toISOString().slice(0, 7),
   );
 
+  // Cargar lista de compras desde Firebase
   useEffect(() => {
-    const cargar = () => {
-      try {
-        const data = localStorage.getItem("lista_compras");
-        setCompras(data ? JSON.parse(data) : []);
-      } catch {
-        setCompras([]);
-      }
-    };
-    cargar();
-    // Escuchar cambios en localStorage desde otras pestañas/componentes
-    window.addEventListener("storage", cargar);
-    // Revisar cada 2 segundos por cambios locales
-    const interval = setInterval(cargar, 2000);
-    return () => {
-      window.removeEventListener("storage", cargar);
-      clearInterval(interval);
-    };
-  }, []);
-
-  // Si no hay datos en localStorage, traerlos de Firebase
-  useEffect(() => {
-    const cargarDesdeFirebase = async () => {
-      if (compras.length > 0) return;
+    const cargar = async () => {
       try {
         const snap = await getDoc(doc(db, "compras", "lista_compras"));
         if (snap.exists()) {
           const data = snap.data();
-          if (data.items && data.items.length > 0) {
-            setCompras(data.items);
-            localStorage.setItem("lista_compras", JSON.stringify(data.items));
-          }
+          setCompras(data.items || []);
+        } else {
+          setCompras([]);
         }
       } catch (error) {
         console.error("Error cargando compras desde Firebase:", error);
+        setCompras([]);
       }
     };
-    cargarDesdeFirebase();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    cargar();
+  }, []);
 
-  // Cargar historial de gastos
+  // Cargar historial de gastos desde Firebase
   useEffect(() => {
     const cargarGastos = async () => {
-      try {
-        const local = localStorage.getItem("historial_gastos");
-        if (local) {
-          const parsed = JSON.parse(local);
-          if (parsed.length > 0) {
-            setGastos(parsed);
-            return;
-          }
-        }
-      } catch {
-        // ignorar error de parse
-      }
-      // Fallback: traer de Firebase
       try {
         const snap = await getDocs(collection(db, "gastos"));
         const lista = snap.docs.map((d) => {
@@ -90,7 +60,6 @@ function Compras() {
           };
         });
         setGastos(lista);
-        localStorage.setItem("historial_gastos", JSON.stringify(lista));
       } catch (error) {
         console.error("Error cargando gastos desde Firebase:", error);
       }
@@ -109,69 +78,102 @@ function Compras() {
     return "unidades";
   };
 
-  const handleComprado = (id, cantidadOriginal) => {
+  const handleEliminar = (id) => {
+    const nuevasCompras = compras.filter((c) => c.id !== id);
+    setCompras(nuevasCompras);
+    setDoc(doc(db, "compras", "lista_compras"), {
+      items: nuevasCompras,
+      updatedAt: new Date(),
+    }).catch((err) => console.error(err));
+  };
+
+  const abrirModal = (item) => {
+    setModalItem(item);
+    setModalCantidad(String(item.cantidadComprar));
+    setModalCosto(String(item.costoPaquete ?? ""));
+  };
+
+  const cerrarModal = () => {
+    setModalItem(null);
+    setModalCantidad("");
+    setModalCosto("");
+  };
+
+  const handleEliminarGasto = (id) => {
+    const actualizados = gastos.filter((g) => g.id !== id);
+    setGastos(actualizados);
+    deleteDoc(doc(db, "gastos", id)).catch((err) =>
+      console.error("Error eliminando gasto:", err),
+    );
+  };
+
+  const confirmarComprado = async () => {
+    if (!modalItem) return;
+    const cantidadComprada = parseFloat(modalCantidad) || 0;
+    const costoFinal = parseFloat(modalCosto) || 0;
+    const costoPorUnidad =
+      cantidadComprada > 0 ? costoFinal / cantidadComprada : 0;
+
     try {
-      // Guardar el gasto del item comprado
-      const itemComprado = compras.find((c) => c.id === id);
-      if (itemComprado) {
-        const nuevoGasto = {
-          id: Date.now().toString(),
-          ingrediente: itemComprado.nombre,
-          cantidad: itemComprado.cantidadComprar,
-          unidad: itemComprado.unidad,
-          costo: itemComprado.costoPaquete || 0,
-          fecha: new Date().toISOString(),
-        };
-        setGastos((prev) => {
-          const updated = [...prev, nuevoGasto];
-          localStorage.setItem("historial_gastos", JSON.stringify(updated));
-          return updated;
-        });
-        addDoc(collection(db, "gastos"), {
-          ingrediente: nuevoGasto.ingrediente,
-          cantidad: nuevoGasto.cantidad,
-          unidad: nuevoGasto.unidad,
-          costo: nuevoGasto.costo,
-          fecha: new Date(),
-        }).catch((err) => console.error("Error guardando gasto:", err));
+      // Guardar gasto
+      const nuevoGasto = {
+        id: Date.now().toString(),
+        ingrediente: modalItem.nombre,
+        cantidad: cantidadComprada,
+        unidad: modalItem.unidad,
+        costo: costoFinal,
+        fecha: new Date().toISOString(),
+      };
+      setGastos((prev) => [...prev, nuevoGasto]);
+      setDoc(doc(db, "gastos", nuevoGasto.id), {
+        ingrediente: nuevoGasto.ingrediente,
+        cantidad: nuevoGasto.cantidad,
+        unidad: nuevoGasto.unidad,
+        costo: nuevoGasto.costo,
+        fecha: new Date(),
+      }).catch((err) => console.error("Error guardando gasto:", err));
+
+      // Actualizar stock en bodega desde Firebase
+      let ingredientesActualizados = null;
+      try {
+        const snap = await getDoc(doc(db, "bodega", "mi_bodega"));
+        if (snap.exists()) {
+          const data = snap.data();
+          ingredientesActualizados = (data.ingredientes || []).map((i) => {
+            if (i.id === modalItem.id) {
+              const nuevaCantidad = (i.cantidad || 0) + cantidadComprada;
+              return {
+                ...i,
+                cantidad: nuevaCantidad,
+                costoPorUnidad:
+                  costoPorUnidad > 0 ? costoPorUnidad : i.costoPorUnidad,
+              };
+            }
+            return i;
+          });
+        }
+      } catch (error) {
+        console.error("Error leyendo bodega desde Firebase:", error);
       }
 
-      const data = localStorage.getItem("bodega_ingredientes");
-      if (data) {
-        const ingredientes = JSON.parse(data);
-        const actualizados = ingredientes.map((i) =>
-          i.id === id ? { ...i, cantidad: cantidadOriginal } : i,
-        );
-        localStorage.setItem(
-          "bodega_ingredientes",
-          JSON.stringify(actualizados),
-        );
-        const nuevasCompras = actualizados
-          .filter(
-            (i) =>
-              i.cantidadOriginal && i.cantidad <= i.cantidadOriginal * 0.25,
-          )
-          .map((i) => ({
-            id: i.id,
-            nombre: i.nombre,
-            cantidadActual: i.cantidad,
-            cantidadOriginal: i.cantidadOriginal,
-            cantidadComprar: i.cantidadOriginal - i.cantidad,
-            unidad: i.unidad,
-            costoPorUnidad: i.costoPorUnidad,
-            costoPaquete: i.costoTotal,
-          }));
-        localStorage.setItem("lista_compras", JSON.stringify(nuevasCompras));
-        setCompras(nuevasCompras);
-
-        setDoc(doc(db, "compras", "lista_compras"), {
-          items: nuevasCompras,
+      if (ingredientesActualizados) {
+        setDoc(doc(db, "bodega", "mi_bodega"), {
+          ingredientes: ingredientesActualizados,
           updatedAt: new Date(),
-        }).catch((err) => console.error(err));
+        }).catch((err) => console.error("Error actualizando bodega:", err));
       }
+
+      // Eliminar de la lista de compras
+      const nuevasCompras = compras.filter((c) => c.id !== modalItem.id);
+      setCompras(nuevasCompras);
+      setDoc(doc(db, "compras", "lista_compras"), {
+        items: nuevasCompras,
+        updatedAt: new Date(),
+      }).catch((err) => console.error(err));
     } catch (error) {
       console.error(error);
     }
+    cerrarModal();
   };
 
   return (
@@ -240,9 +242,16 @@ function Compras() {
                   <td data-label="Acción">
                     <button
                       className="btn-comprado"
-                      onClick={() => handleComprado(c.id, c.cantidadOriginal)}
+                      onClick={() => abrirModal(c)}
                     >
                       ✅ Comprado
+                    </button>
+                    <button
+                      className="btn-eliminar-compra"
+                      onClick={() => handleEliminar(c.id)}
+                      title="Eliminar de la lista"
+                    >
+                      🗑️
                     </button>
                   </td>
                 </tr>
@@ -332,6 +341,7 @@ function Compras() {
                       <th>Cantidad</th>
                       <th>Costo</th>
                       <th>Fecha</th>
+                      <th></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -358,6 +368,15 @@ function Compras() {
                               minute: "2-digit",
                             })}
                           </td>
+                          <td data-label="">
+                            <button
+                              className="btn-eliminar-compra"
+                              onClick={() => handleEliminarGasto(g.id)}
+                              title="Eliminar registro"
+                            >
+                              🗑️
+                            </button>
+                          </td>
                         </tr>
                       ))}
                   </tbody>
@@ -366,7 +385,7 @@ function Compras() {
                       <td colSpan="3" className="total-label">
                         Total del período
                       </td>
-                      <td colSpan="2" className="total-value">
+                      <td colSpan="3" className="total-value">
                         ${totalGastos.toFixed(2)}
                       </td>
                     </tr>
@@ -377,6 +396,58 @@ function Compras() {
           );
         })()}
       </div>
+
+      {/* ── Modal confirmar compra ── */}
+      {modalItem && (
+        <div className="modal-overlay" onClick={cerrarModal}>
+          <div className="modal-compra" onClick={(e) => e.stopPropagation()}>
+            <h3>✅ Confirmar compra</h3>
+            <p className="modal-ingrediente">{modalItem.nombre}</p>
+            <div className="modal-field">
+              <label>Cantidad comprada ({modalItem.unidad})</label>
+              <input
+                type="number"
+                min="0"
+                step="any"
+                value={modalCantidad}
+                onChange={(e) => setModalCantidad(e.target.value)}
+              />
+            </div>
+            <div className="modal-field">
+              <label>Costo del paquete ($)</label>
+              <input
+                type="number"
+                min="0"
+                step="any"
+                value={modalCosto}
+                onChange={(e) => setModalCosto(e.target.value)}
+              />
+            </div>
+            <div className="modal-info">
+              <span>Costo por {modalItem.unidad}:</span>
+              <strong>
+                $
+                {parseFloat(modalCantidad) > 0
+                  ? (
+                      parseFloat(modalCosto) / parseFloat(modalCantidad)
+                    ).toFixed(4)
+                  : "0.0000"}
+              </strong>
+            </div>
+            <div className="modal-actions">
+              <button className="btn-cancelar-modal" onClick={cerrarModal}>
+                Cancelar
+              </button>
+              <button
+                className="btn-confirmar-modal"
+                onClick={confirmarComprado}
+              >
+                Confirmar compra
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

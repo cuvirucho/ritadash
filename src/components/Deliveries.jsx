@@ -3,9 +3,6 @@ import { db } from "../firbase/Firebase";
 import { collection, getDocs, doc, deleteDoc } from "firebase/firestore";
 import "./Deliveries.css";
 
-const CACHE_KEY = "rita_usuarios_cache";
-const ENTREGAS_KEY = "rita_entregas";
-
 const COMIDA_LABELS = {
   desayuno: { icon: "☀️", label: "Desayuno" },
   snack_manana: { icon: "🍎", label: "Snack Mañana" },
@@ -40,54 +37,41 @@ const ENTREGAS_LABEL_NORMALIZE = {
   Cena: "cena",
 };
 
-const loadCache = () => {
-  const raw = localStorage.getItem(CACHE_KEY);
-  if (!raw) return [];
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return [];
-  }
-};
-
-const loadEntregas = () => {
-  try {
-    return JSON.parse(localStorage.getItem(ENTREGAS_KEY) || "[]");
-  } catch {
-    return [];
-  }
-};
-
 const getEmail = (u) =>
   u.datapayphone?.email || u.datapayphone?.optionalParameter2 || "Sin email";
 const getPhone = (u) =>
   u.datapayphone?.optionalParameter1 || u.datapayphone?.phoneNumber || "";
 
 function Deliveries() {
-  const [allUsers] = useState(() => loadCache());
-  // rita_entregas = platos listos en cocina (no entregados aún)
-  const [entregasListas, setEntregasListas] = useState(() => loadEntregas());
+  const [allUsers, setAllUsers] = useState([]);
+  const [entregasListas, setEntregasListas] = useState([]);
   const [busqueda, setBusqueda] = useState("");
   const [filtroTab, setFiltroTab] = useState("todos");
-  const [entregados, setEntregados] = useState([]);
-
-  // Si no hay datos en localStorage, cargar desde Firebase
-  useEffect(() => {
-    const local = localStorage.getItem(ENTREGAS_KEY);
-    if (!local || local) {
-      getDocs(collection(db, "platoslistos"))
-        .then((snapshot) => {
-          const data = snapshot.docs.map((doc) => ({
-            id: doc.id,
-            ...doc.data(),
-          }));
-          if (data.length > 0) {
-            setEntregasListas(data);
-            localStorage.setItem(ENTREGAS_KEY, JSON.stringify(data));
-          }
-        })
-        .catch((err) => console.error("Error cargando platoslistos:", err));
+  const [entregados, setEntregados] = useState(() => {
+    try {
+      const saved = localStorage.getItem("rita_entregados");
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
     }
+  });
+  const [loading, setLoading] = useState(true);
+
+  // Cargar datos directamente desde Firebase
+  useEffect(() => {
+    setLoading(true);
+    Promise.all([
+      getDocs(collection(db, "UsuariosActivos")),
+      getDocs(collection(db, "platoslistos")),
+    ])
+      .then(([usersSnap, platosSnap]) => {
+        const users = usersSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        const platos = platosSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        setAllUsers(users);
+        setEntregasListas(platos);
+      })
+      .catch((err) => console.error("Error cargando datos:", err))
+      .finally(() => setLoading(false));
   }, []);
 
   // Build a Set of "userId_comida" keys for fast lookup of kitchen-ready meals
@@ -101,12 +85,43 @@ function Deliveries() {
     return set;
   }, [entregasListas]);
 
+  /*coinactrcon bakejnparacatulsir peido*/
+
+  // ── enviar a bakeel cabo de esto*/ ──
+  const handlemarcarcmolistoabaken = async (d) => {
+    console.log(d, "--- datos para marcar como listo a baken ---");
+
+    try {
+      const res = await fetch(
+        "https://apiapp-gq4hj2kfcq-uc.a.run.app/entregarGrupo",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userId: d.userId,
+            codigo: d.codigo,
+          }),
+        },
+      );
+
+      const data = await res.json();
+
+      if (data.success) {
+        alert("✅ Notificación enviada al usuario");
+      } else {
+        alert("❌ Error: " + (data.error || "desconocido"));
+      }
+    } catch (err) {
+      console.error("Error enviando notificación:", err);
+      alert("❌ No se pudo conectar con el servidor");
+    }
+  };
+
   // Mark delivery as done: remove from rita_entregas
   const handleHacerEntrega = useCallback((entregaIndex) => {
     setEntregasListas((prev) => {
       const removed = prev[entregaIndex];
       const next = prev.filter((_, i) => i !== entregaIndex);
-      localStorage.setItem(ENTREGAS_KEY, JSON.stringify(next));
       if (removed?.id) {
         deleteDoc(doc(db, "platoslistos", removed.id)).catch((err) =>
           console.error("Error eliminando de platoslistos:", err),
@@ -117,12 +132,19 @@ function Deliveries() {
   }, []);
 
   // Mark ALL comidas of a delivery group as delivered at once
-  const handleEntregarTodo = useCallback((indices, deliveryData) => {
+  const handleEntregarTodo = useCallback(async (indices, deliveryData) => {
     // Add to entregados section
-    setEntregados((prev) => [
-      ...prev,
-      { ...deliveryData, entregadoAt: new Date().toLocaleTimeString() },
-    ]);
+    setEntregados((prev) => {
+      const next = [
+        ...prev,
+        { ...deliveryData, entregadoAt: new Date().toLocaleTimeString() },
+      ];
+      localStorage.setItem("rita_entregados", JSON.stringify(next));
+      return next;
+    });
+
+    // Enviar a baken
+    await handlemarcarcmolistoabaken(deliveryData);
 
     setEntregasListas((prev) => {
       const toRemove = new Set(indices);
@@ -134,7 +156,6 @@ function Deliveries() {
         }
       });
       const next = prev.filter((_, i) => !toRemove.has(i));
-      localStorage.setItem(ENTREGAS_KEY, JSON.stringify(next));
       return next;
     });
   }, []);
@@ -242,17 +263,19 @@ function Deliveries() {
     if (allDeliveries.length === 0 && entregados.length > 0) {
       const timer = setTimeout(() => {
         setEntregados([]);
-        // Reload entregas from Firebase
-        getDocs(collection(db, "platoslistos"))
-          .then((snapshot) => {
-            const data = snapshot.docs.map((d) => ({
-              id: d.id,
-              ...d.data(),
-            }));
-            setEntregasListas(data);
-            localStorage.setItem(ENTREGAS_KEY, JSON.stringify(data));
+        localStorage.removeItem("rita_entregados");
+        // Reload desde Firebase
+        Promise.all([
+          getDocs(collection(db, "UsuariosActivos")),
+          getDocs(collection(db, "platoslistos")),
+        ])
+          .then(([usersSnap, platosSnap]) => {
+            setAllUsers(usersSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
+            setEntregasListas(
+              platosSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
+            );
           })
-          .catch((err) => console.error("Error recargando platoslistos:", err));
+          .catch((err) => console.error("Error recargando datos:", err));
       }, 3000);
       return () => clearTimeout(timer);
     }
@@ -265,6 +288,9 @@ function Deliveries() {
         <p className="subtitle">
           Organizadas por hora — platos listos en cocina se marcan desde Menús
         </p>
+        {loading && (
+          <p className="subtitle">⏳ Cargando datos desde Firebase...</p>
+        )}
       </header>
 
       {/* ── CARDS ── */}
@@ -346,7 +372,7 @@ function Deliveries() {
           <h2>No hay entregas</h2>
           <p>
             {allUsers.length === 0
-              ? "No hay datos en caché. Ve al Panel de Control primero."
+              ? "No hay usuarios con entregas registradas en Firebase."
               : "Ninguna entrega coincide con tu búsqueda."}
           </p>
         </div>
@@ -497,6 +523,35 @@ function DeliveryCard({ delivery: d, onHacerEntrega, onEntregarTodo }) {
       alert("Este usuario no tiene número de teléfono registrado.");
     }
   };
+  console.log(d, "--- entrega data ---");
+
+  // ── envia notificación ──
+  const handleEnviarNotificacion = async () => {
+    try {
+      const res = await fetch(
+        "https://apiapp-gq4hj2kfcq-uc.a.run.app/entregarComida",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userId: d.userId,
+            codigo: d.codigo,
+          }),
+        },
+      );
+
+      const data = await res.json();
+
+      if (data.success) {
+        alert("✅ Notificación enviada al usuario");
+      } else {
+        alert("❌ Error: " + (data.error || "desconocido"));
+      }
+    } catch (err) {
+      console.error("Error enviando notificación:", err);
+      alert("❌ No se pudo conectar con el servidor");
+    }
+  };
 
   return (
     <div className={`del-card-entrega ${d.allReady ? "del-ready" : ""}`}>
@@ -582,8 +637,17 @@ function DeliveryCard({ delivery: d, onHacerEntrega, onEntregarTodo }) {
             onClick={handleAvisarLlegada}
             title="Avisar al usuario por WhatsApp que llegó su comida"
           >
-            📲 Avisar llegada
+            📲 Mesaje whasp
           </button>
+
+          <button
+            className="del-btn-notificar"
+            onClick={handleEnviarNotificacion}
+            title="Enviar notificación push al usuario"
+          >
+            🔔 Enviar notificación
+          </button>
+
           {d.allReady && (
             <button
               className="del-btn-entregar"

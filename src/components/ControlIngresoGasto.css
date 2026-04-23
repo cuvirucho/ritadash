@@ -403,3 +403,219 @@
     margin-right: 0.5rem;
   }
 }
+
+/* ── 4 columnas resumen ── */
+.control-ig-resumen-4 {
+  grid-template-columns: repeat(4, 1fr);
+}
+.resumen-card.menu-cost .card-value {
+  color: #fb923c;
+}
+
+/* ── Métricas de salud ── */
+.control-ig-metricas {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 0.75rem;
+  margin-bottom: 2rem;
+}
+.metrica-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem 1.1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  box-shadow: var(--shadow);
+}
+.metrica-icon {
+  font-size: 1.5rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.metrica-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+.metrica-label {
+  font-size: 0.67rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+.metrica-valor {
+  font-size: 1.15rem;
+  font-weight: 800;
+  line-height: 1.1;
+  color: var(--text);
+}
+.metrica-verde {
+  color: var(--success, #34d399);
+}
+.metrica-rojo {
+  color: var(--danger, #f87171);
+}
+
+/* ── Barra 3 segmentos ── */
+.bar-gasto-compras {
+  background: var(--danger, #f87171);
+  transition: width 0.4s ease;
+  min-width: 2px;
+}
+.bar-gasto-menus {
+  background: #fb923c;
+  transition: width 0.4s ease;
+  min-width: 2px;
+}
+.label-gasto-compras {
+  color: var(--danger, #f87171);
+  font-weight: 600;
+}
+.label-gasto-menus {
+  color: #fb923c;
+  font-weight: 600;
+}
+
+/* ── Fila clickable ── */
+.tr-clickable {
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.tr-clickable:hover {
+  background: rgba(124, 106, 239, 0.08) !important;
+}
+.td-click-hint {
+  margin-left: 0.4rem;
+  opacity: 0;
+  font-size: 0.8rem;
+  color: var(--accent, #818cf8);
+  transition: opacity 0.15s;
+}
+.tr-clickable:hover .td-click-hint {
+  opacity: 1;
+}
+
+/* ── Modal usuario ── */
+.usuario-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+.usuario-modal {
+  background: var(--surface, #1e1e2e);
+  border: 1px solid var(--border);
+  border-radius: 1.2rem;
+  padding: 2rem;
+  max-width: 560px;
+  width: 100%;
+  max-height: 85vh;
+  overflow-y: auto;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
+  position: relative;
+}
+.usuario-modal-close {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--text-muted);
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 0.85rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+}
+.usuario-modal-close:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+.usuario-modal-header {
+  margin-bottom: 1.25rem;
+  padding-right: 2.5rem;
+}
+.usuario-modal-name {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0 0 0.4rem;
+}
+.usuario-modal-totales {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+.modal-total-item {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+  border-radius: 0.7rem;
+  padding: 0.7rem 0.9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+.modal-total-item span:first-child {
+  font-size: 0.67rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+.modal-total-item span:last-child {
+  font-size: 1.1rem;
+  font-weight: 800;
+}
+.modal-balance {
+  border-color: var(--accent, #818cf8);
+  background: rgba(129, 140, 248, 0.06);
+}
+.usuario-modal-desglose-title {
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  margin: 0 0 0.75rem;
+}
+.usuario-modal-table {
+  font-size: 0.8rem;
+}
+
+/* ── Responsive adicional ── */
+@media (max-width: 1024px) {
+  .control-ig-metricas {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+@media (max-width: 900px) {
+  .control-ig-resumen-4 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .control-ig-metricas {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (max-width: 600px) {
+  .control-ig-resumen-4 {
+    grid-template-columns: 1fr 1fr;
+  }
+  .control-ig-metricas {
+    grid-template-columns: 1fr 1fr;
+  }
+  .usuario-modal-totales {
+    grid-template-columns: 1fr;
+  }
+}

@@ -211,7 +211,6 @@
 .ingredient-table {
   width: 100%;
   border-collapse: collapse;
-  table-layout: fixed;
 }
 .ingredient-table thead th {
   font-size: 0.68rem;
@@ -227,43 +226,52 @@
   background: var(--surface);
   white-space: nowrap;
 }
-.ingredient-table thead th:nth-child(1) {
-  width: 3%;
-}
-.ingredient-table thead th:nth-child(2) {
-  width: 22%;
-}
-.ingredient-table thead th:nth-child(3) {
-  width: 8%;
-}
-.ingredient-table thead th:nth-child(4) {
-  width: 7%;
-}
-.ingredient-table thead th:nth-child(5) {
-  width: 12%;
-}
-.ingredient-table thead th:nth-child(6) {
-  width: 12%;
-}
-.ingredient-table thead th:nth-child(7) {
-  width: 26%;
-}
-.ingredient-table thead th:nth-child(8) {
-  width: 10%;
-}
 .ingredient-table tbody td {
   padding: 0.55rem 0.45rem;
   font-size: 0.8rem;
   border-bottom: 1px solid var(--border);
   vertical-align: middle;
+}
+.td-name {
+  font-weight: 500;
+  white-space: normal;
+  word-break: break-word;
+  min-width: 120px;
+}
+.td-nombre-text {
+  display: block;
+}
+.en-compras-badge {
+  display: inline-block;
+  margin-top: 0.2rem;
+  font-size: 0.65rem;
+  font-weight: 700;
+  background: #22c55e18;
+  color: #16a34a;
+  border: 1px solid #22c55e44;
+  padding: 0.1rem 0.4rem;
+  border-radius: 5px;
   white-space: nowrap;
 }
-.ingredient-table
-  tbody
-  td:not(.td-name):not([data-label="Acciones"]):not([data-label="Stock"]) {
-  overflow: hidden;
-  text-overflow: ellipsis;
+.label-opcional {
+  font-size: 0.72rem;
+  font-weight: 400;
+  color: var(--text-muted);
 }
+.ultima-compra-info {
+  margin-top: 0.3rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  background: var(--surface-2);
+  border-radius: 5px;
+  padding: 0.3rem 0.5rem;
+  border-left: 3px solid var(--accent);
+}
+.td-qty,
+.td-cost {
+  white-space: nowrap;
+}
+
 .ingredient-table tbody tr {
   transition: background 0.15s;
 }
@@ -274,19 +282,48 @@
   border-bottom: none;
 }
 
-.td-name {
+/* ── Sort bar ── */
+.sort-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.85rem;
+  padding: 0.5rem 0.6rem;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.sort-bar-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
   font-weight: 500;
-  white-space: normal;
-  word-break: break-word;
-  min-width: 0;
+  margin-right: 0.2rem;
+  white-space: nowrap;
 }
-.td-qty {
-  font-variant-numeric: tabular-nums;
+.sort-btn {
+  padding: 0.3rem 0.75rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
 }
-.td-cost {
-  color: var(--success);
+.sort-btn:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+.sort-btn.sort-btn-active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
   font-weight: 600;
-  font-variant-numeric: tabular-nums;
 }
 
 .unit-badge {
@@ -494,6 +531,21 @@
   color: var(--accent);
   background: var(--accent-bg);
   border-color: rgba(129, 140, 248, 0.2);
+}
+.btn-compras {
+  background: none;
+  border: 1px solid transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0.3rem 0.5rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  transition: all 0.2s;
+}
+.btn-compras:hover {
+  color: #22c55e;
+  background: #22c55e18;
+  border-color: #22c55e44;
 }
 
 /* ── Modal overlay ── */
@@ -707,18 +759,30 @@
   gap: 0.35rem;
   min-width: 0;
 }
+.stock-cell-col {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.3rem;
+}
+.stock-bar-wrap {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
 .stock-bar {
-  width: 40px;
-  height: 5px;
+  width: 100%;
+  min-width: 80px;
+  height: 7px;
   background: var(--surface-2);
-  border-radius: 3px;
+  border-radius: 4px;
   overflow: hidden;
   flex-shrink: 0;
 }
 .stock-fill {
   height: 100%;
-  border-radius: 3px;
-  transition: width 0.3s;
+  border-radius: 4px;
+  transition: width 0.4s ease;
 }
 .stock-fill.stock-ok {
   background: var(--success, #22c55e);
@@ -728,16 +792,45 @@
 }
 .stock-fill.stock-low {
   background: var(--danger, #ef4444);
+  animation: pulse-low 1.4s infinite;
 }
-.stock-text {
+@keyframes pulse-low {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+.stock-labels {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.4rem;
+}
+.stock-qty {
   font-size: 0.72rem;
-  font-weight: 600;
-  min-width: 28px;
+  font-weight: 700;
+  color: var(--text);
 }
-.stock-alert {
-  font-size: 0.8rem;
+.stock-qty-low {
+  color: #ef4444;
 }
-.stock-urgent {
+.stock-min-label {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+}
+.stock-alert-badge {
+  font-size: 0.7rem;
+  font-weight: 700;
+  background: #ff4d4f22;
+  color: #ef4444;
+  border: 1px solid #ef444455;
+  padding: 0.1rem 0.45rem;
+  border-radius: 5px;
+  white-space: nowrap;
+}
+.stock-alert-badge-urgent {
   background: #ff4d4f;
   color: #fff;
   font-size: 0.75rem;
@@ -760,13 +853,14 @@
   flex-shrink: 0;
 }
 .consume-input {
-  width: 42px;
-  padding: 0.15rem 0.25rem;
+  width: 80%;
+  padding: 0.2rem 0.25rem;
   background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  color: var(--text);
+  border: 1px solid #fff;
+  border-radius: 40px;
+  color: #fff;
   font-size: 0.75rem;
+  margin-top: 10px;
   text-align: center;
   outline: none;
 }
@@ -774,6 +868,6 @@
   border-color: var(--accent);
 }
 .consume-input::placeholder {
-  color: var(--text-muted);
+  color: #fff;
   opacity: 0.5;
 }

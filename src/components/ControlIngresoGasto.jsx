@@ -3,7 +3,6 @@ import "./ControlIngresoGasto.css";
 import { collection, getDocs } from "firebase/firestore";
 import { db } from "../firbase/Firebase";
 
-const CACHE_KEY = "rita_usuarios_cache";
 const PRECIO_PREMIUM = 208;
 const PRECIO_STARTER = 170;
 
@@ -13,6 +12,7 @@ function ControlIngresoGasto({ onClose }) {
   const [claveError, setClaveError] = useState(false);
   const [usuarios, setUsuarios] = useState([]);
   const [gastos, setGastos] = useState([]);
+  const [bodega, setBodega] = useState([]);
   const [filtro, setFiltro] = useState("mes");
   const [fechaFiltro, setFechaFiltro] = useState(
     new Date().toISOString().slice(0, 10),
@@ -26,19 +26,11 @@ function ControlIngresoGasto({ onClose }) {
   const [fechaHasta, setFechaHasta] = useState(
     new Date().toISOString().slice(0, 10),
   );
+  const [usuarioSeleccionado, setUsuarioSeleccionado] = useState(null);
 
-  // Cargar usuarios (ingresos) desde cache o Firebase
+  // Cargar usuarios (ingresos) desde Firebase
   useEffect(() => {
     const cargarUsuarios = async () => {
-      try {
-        const cached = localStorage.getItem(CACHE_KEY);
-        if (cached) {
-          setUsuarios(JSON.parse(cached));
-          return;
-        }
-      } catch {
-        // ignorar
-      }
       try {
         const snap = await getDocs(collection(db, "UsuariosActivos"));
         const data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
@@ -49,22 +41,10 @@ function ControlIngresoGasto({ onClose }) {
     };
     cargarUsuarios();
   }, []);
-
-  // Cargar gastos desde localStorage o Firebase
+  console.log(usuarios, "user");
+  // Cargar gastos desde Firebase
   useEffect(() => {
     const cargarGastos = async () => {
-      try {
-        const local = localStorage.getItem("historial_gastos");
-        if (local) {
-          const parsed = JSON.parse(local);
-          if (parsed.length > 0) {
-            setGastos(parsed);
-            return;
-          }
-        }
-      } catch {
-        // ignorar
-      }
       try {
         const snap = await getDocs(collection(db, "gastos"));
         const lista = snap.docs.map((d) => {
@@ -78,12 +58,28 @@ function ControlIngresoGasto({ onClose }) {
           };
         });
         setGastos(lista);
-        localStorage.setItem("historial_gastos", JSON.stringify(lista));
       } catch (err) {
         console.error("Error cargando gastos:", err);
       }
     };
     cargarGastos();
+  }, []);
+
+  // Cargar bodega desde Firebase
+  useEffect(() => {
+    const cargarBodega = async () => {
+      try {
+        const { doc, getDoc } = await import("firebase/firestore");
+        const snap = await getDoc(doc(db, "bodega", "mi_bodega"));
+        if (snap.exists()) {
+          const data = snap.data();
+          setBodega(data.ingredientes || []);
+        }
+      } catch (err) {
+        console.error("Error cargando bodega:", err);
+      }
+    };
+    cargarBodega();
   }, []);
 
   // Filtrar usuarios (ingresos) por fecha de activación
@@ -128,11 +124,77 @@ function ControlIngresoGasto({ onClose }) {
     (acc, g) => acc + (g.costo || 0),
     0,
   );
-  const balance = totalIngresos - totalGastos;
+  // Costo de menú por usuario
+  const parseQty = (str) => {
+    if (!str) return { qty: 0, unit: "" };
+    const match = String(str).match(/^([\d.]+)\s*([a-zA-Z]*)/);
+    return match
+      ? { qty: parseFloat(match[1]) || 0, unit: (match[2] || "").toLowerCase() }
+      : { qty: 0, unit: "" };
+  };
 
-  const barTotal = totalIngresos + totalGastos || 1;
+  const COMIDAS = ["desayuno", "almuerzo", "cena", "snack1", "snack2"];
+  const DIAS = ["dia1", "dia2", "dia3", "dia4", "dia5"];
+
+  const costosPorUsuario = useMemo(() => {
+    return usuariosFiltrados.map((u) => {
+      let costoTotal = 0;
+      const detalle = {};
+      const menucreado = u.menu?.menucreado;
+      if (menucreado) {
+        DIAS.forEach((dia) => {
+          const diaData = menucreado[dia];
+          if (!diaData) return;
+          COMIDAS.forEach((comida) => {
+            const comidaData = diaData[comida];
+            if (!comidaData?.ingredientes) return;
+            Object.entries(comidaData.ingredientes).forEach(
+              ([nombre, cantStr]) => {
+                const { qty, unit } = parseQty(cantStr);
+                if (!qty) return;
+                const ingredienteBodega = bodega.find(
+                  (b) => b.nombre.toLowerCase() === nombre.toLowerCase(),
+                );
+                if (!ingredienteBodega) return;
+                const costo = qty * (ingredienteBodega.costoPorUnidad || 0);
+                costoTotal += costo;
+                detalle[nombre] = {
+                  qty: (detalle[nombre]?.qty || 0) + qty,
+                  unit,
+                  costoPorUnidad: ingredienteBodega.costoPorUnidad || 0,
+                  costoTotal: (detalle[nombre]?.costoTotal || 0) + costo,
+                };
+              },
+            );
+          });
+        });
+      }
+      const planPrecio =
+        u.cart?.nombre === "Plan Premium"
+          ? PRECIO_PREMIUM
+          : u.cart?.nombre === "Plan Starter"
+            ? PRECIO_STARTER
+            : 0;
+      return {
+        usuario: u,
+        costoMenu: costoTotal,
+        detalle,
+        ganancia: planPrecio - costoTotal,
+      };
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [usuariosFiltrados, bodega]);
+
+  const totalCostosMenus = costosPorUsuario.reduce(
+    (acc, { costoMenu }) => acc + costoMenu,
+    0,
+  );
+  const totalGastoReal = totalGastos + totalCostosMenus;
+  const balanceReal = totalIngresos - totalGastoReal;
+  const barTotal = totalIngresos + totalGastoReal || 1;
   const pctIngreso = (totalIngresos / barTotal) * 100;
-  const pctGasto = (totalGastos / barTotal) * 100;
+  const pctGastoCompras = (totalGastos / barTotal) * 100;
+  const pctGastoMenus = (totalCostosMenus / barTotal) * 100;
 
   const periodoLabel =
     filtro === "dia"
@@ -241,7 +303,7 @@ function ControlIngresoGasto({ onClose }) {
       </div>
 
       {/* ── Resumen ── */}
-      <div className="control-ig-resumen">
+      <div className="control-ig-resumen control-ig-resumen-4">
         <div className="resumen-card ingreso">
           <div className="card-icon">📈</div>
           <div className="card-info">
@@ -250,20 +312,27 @@ function ControlIngresoGasto({ onClose }) {
           </div>
         </div>
         <div className="resumen-card gasto">
-          <div className="card-icon">📉</div>
+          <div className="card-icon">🛒</div>
           <div className="card-info">
-            <span className="card-label">Gastos</span>
+            <span className="card-label">Compras bodega</span>
             <span className="card-value">${totalGastos.toFixed(2)}</span>
           </div>
         </div>
-        <div
-          className={`resumen-card balance ${balance >= 0 ? "balance-positivo" : "balance-negativo"}`}
-        >
-          <div className="card-icon">{balance >= 0 ? "✅" : "⚠️"}</div>
+        <div className="resumen-card menu-cost">
+          <div className="card-icon">🍽️</div>
           <div className="card-info">
-            <span className="card-label">Balance</span>
+            <span className="card-label">Costos menús</span>
+            <span className="card-value">${totalCostosMenus.toFixed(2)}</span>
+          </div>
+        </div>
+        <div
+          className={`resumen-card balance ${balanceReal >= 0 ? "balance-positivo" : "balance-negativo"}`}
+        >
+          <div className="card-icon">{balanceReal >= 0 ? "✅" : "⚠️"}</div>
+          <div className="card-info">
+            <span className="card-label">Balance neto</span>
             <span className="card-value">
-              {balance >= 0 ? "+" : ""}${balance.toFixed(2)}
+              {balanceReal >= 0 ? "+" : ""}${balanceReal.toFixed(2)}
             </span>
           </div>
         </div>
@@ -271,16 +340,98 @@ function ControlIngresoGasto({ onClose }) {
 
       {/* ── Barra visual ── */}
       <div className="control-ig-bar-container">
-        <h3>Proporción ingreso vs gasto</h3>
+        <h3>Distribución de ingresos y egresos</h3>
         <div className="bar-wrapper">
           <div className="bar-ingreso" style={{ width: `${pctIngreso}%` }} />
-          <div className="bar-gasto" style={{ width: `${pctGasto}%` }} />
+          <div
+            className="bar-gasto-compras"
+            style={{ width: `${pctGastoCompras}%` }}
+          />
+          <div
+            className="bar-gasto-menus"
+            style={{ width: `${pctGastoMenus}%` }}
+          />
         </div>
         <div className="bar-labels">
           <span className="label-ingreso">
             Ingresos {pctIngreso.toFixed(0)}%
           </span>
-          <span className="label-gasto">Gastos {pctGasto.toFixed(0)}%</span>
+          <span className="label-gasto-compras">
+            Compras {pctGastoCompras.toFixed(0)}%
+          </span>
+          <span className="label-gasto-menus">
+            Menús {pctGastoMenus.toFixed(0)}%
+          </span>
+        </div>
+      </div>
+
+      {/* ── Métricas de salud ── */}
+      <div className="control-ig-metricas">
+        <div className="metrica-card">
+          <div className="metrica-icon">📊</div>
+          <div className="metrica-info">
+            <span className="metrica-label">Margen bruto</span>
+            <span
+              className={`metrica-valor ${
+                totalIngresos > 0 &&
+                (totalIngresos - totalCostosMenus) / totalIngresos >= 0.5
+                  ? "metrica-verde"
+                  : "metrica-rojo"
+              }`}
+            >
+              {totalIngresos > 0
+                ? (
+                    ((totalIngresos - totalCostosMenus) / totalIngresos) *
+                    100
+                  ).toFixed(1)
+                : "0"}
+              %
+            </span>
+          </div>
+        </div>
+        <div className="metrica-card">
+          <div className="metrica-icon">🍽️</div>
+          <div className="metrica-info">
+            <span className="metrica-label">Costo prom. menú</span>
+            <span className="metrica-valor metrica-rojo">
+              $
+              {costosPorUsuario.length > 0
+                ? (totalCostosMenus / costosPorUsuario.length).toFixed(2)
+                : "0.00"}
+            </span>
+          </div>
+        </div>
+        <div className="metrica-card">
+          <div className="metrica-icon">💸</div>
+          <div className="metrica-info">
+            <span className="metrica-label">Total egresos</span>
+            <span className="metrica-valor metrica-rojo">
+              ${totalGastoReal.toFixed(2)}
+            </span>
+          </div>
+        </div>
+        <div className="metrica-card">
+          <div className="metrica-icon">🎯</div>
+          <div className="metrica-info">
+            <span className="metrica-label">ROI neto</span>
+            <span
+              className={`metrica-valor ${
+                balanceReal >= 0 ? "metrica-verde" : "metrica-rojo"
+              }`}
+            >
+              {totalGastoReal > 0
+                ? ((balanceReal / totalGastoReal) * 100).toFixed(1)
+                : "0"}
+              %
+            </span>
+          </div>
+        </div>
+        <div className="metrica-card">
+          <div className="metrica-icon">👥</div>
+          <div className="metrica-info">
+            <span className="metrica-label">Usuarios período</span>
+            <span className="metrica-valor">{usuariosFiltrados.length}</span>
+          </div>
         </div>
       </div>
 
@@ -426,6 +577,227 @@ function ControlIngresoGasto({ onClose }) {
           )}
         </div>
       </div>
+
+      {/* ── Costo de menú por usuario ── */}
+      <div className="control-ig-detalle">
+        <div className="detalle-card" style={{ gridColumn: "1 / -1" }}>
+          <h3>
+            <span>🍽️</span> Costo de Menú por Usuario
+          </h3>
+          {costosPorUsuario.length === 0 ? (
+            <div className="detalle-empty">
+              <div className="empty-icon">📭</div>
+              <p>Sin usuarios en este período</p>
+            </div>
+          ) : (
+            <table className="ig-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Cliente</th>
+                  <th>Plan</th>
+                  <th>Costo Menú</th>
+                  <th>Ganancia Neta</th>
+                </tr>
+              </thead>
+              <tbody>
+                {costosPorUsuario.map((item, i) => {
+                  const { usuario: u, costoMenu, ganancia } = item;
+                  const plan = u.cart?.nombre || "—";
+                  return (
+                    <tr
+                      key={u.id}
+                      className="tr-clickable"
+                      onClick={() => setUsuarioSeleccionado(item)}
+                      title="Ver desglose de ingredientes"
+                    >
+                      <td data-label="#">{i + 1}</td>
+                      <td data-label="Cliente" className="td-name">
+                        {u.datapayphone?.optionalParameter4 ||
+                          u.datapayphone?.email ||
+                          "Sin nombre"}
+                        <span className="td-click-hint">→</span>
+                      </td>
+                      <td data-label="Plan">
+                        <span
+                          className={`plan-badge ${
+                            plan === "Plan Premium" ? "premium" : "starter"
+                          }`}
+                        >
+                          {plan.replace("Plan ", "")}
+                        </span>
+                      </td>
+                      <td data-label="Costo Menú" className="td-gasto">
+                        ${costoMenu.toFixed(2)}
+                      </td>
+                      <td
+                        data-label="Ganancia Neta"
+                        className={ganancia >= 0 ? "td-ingreso" : "td-gasto"}
+                      >
+                        {ganancia >= 0 ? "+" : ""}${ganancia.toFixed(2)}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td colSpan="3">
+                    {costosPorUsuario.length} usuario
+                    {costosPorUsuario.length !== 1 ? "s" : ""}
+                  </td>
+                  <td className="td-gasto">${totalCostosMenus.toFixed(2)}</td>
+                  <td
+                    className={
+                      costosPorUsuario.reduce(
+                        (a, { ganancia }) => a + ganancia,
+                        0,
+                      ) >= 0
+                        ? "td-ingreso"
+                        : "td-gasto"
+                    }
+                  >
+                    {costosPorUsuario.reduce(
+                      (a, { ganancia }) => a + ganancia,
+                      0,
+                    ) >= 0
+                      ? "+"
+                      : ""}
+                    $
+                    {costosPorUsuario
+                      .reduce((a, { ganancia }) => a + ganancia, 0)
+                      .toFixed(2)}
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          )}
+        </div>
+      </div>
+
+      {/* ── Modal desglose usuario ── */}
+      {usuarioSeleccionado && (
+        <div
+          className="usuario-modal-overlay"
+          onClick={() => setUsuarioSeleccionado(null)}
+        >
+          <div className="usuario-modal" onClick={(e) => e.stopPropagation()}>
+            <button
+              className="usuario-modal-close"
+              onClick={() => setUsuarioSeleccionado(null)}
+            >
+              ✕
+            </button>
+            <div className="usuario-modal-header">
+              <p className="usuario-modal-name">
+                {usuarioSeleccionado.usuario.datapayphone?.optionalParameter4 ||
+                  usuarioSeleccionado.usuario.datapayphone?.email ||
+                  "Sin nombre"}
+              </p>
+              <span
+                className={`plan-badge ${
+                  usuarioSeleccionado.usuario.cart?.nombre === "Plan Premium"
+                    ? "premium"
+                    : "starter"
+                }`}
+              >
+                {(usuarioSeleccionado.usuario.cart?.nombre || "—").replace(
+                  "Plan ",
+                  "",
+                )}
+              </span>
+            </div>
+
+            <div className="usuario-modal-totales">
+              <div className="modal-total-item">
+                <span>Ingreso plan</span>
+                <span className="td-ingreso">
+                  $
+                  {(usuarioSeleccionado.usuario.cart?.nombre === "Plan Premium"
+                    ? PRECIO_PREMIUM
+                    : PRECIO_STARTER
+                  ).toFixed(2)}
+                </span>
+              </div>
+              <div className="modal-total-item">
+                <span>Costo menú</span>
+                <span className="td-gasto">
+                  ${usuarioSeleccionado.costoMenu.toFixed(2)}
+                </span>
+              </div>
+              <div className="modal-total-item modal-balance">
+                <span>Ganancia neta</span>
+                <span
+                  className={
+                    usuarioSeleccionado.ganancia >= 0
+                      ? "td-ingreso"
+                      : "td-gasto"
+                  }
+                >
+                  {usuarioSeleccionado.ganancia >= 0 ? "+" : ""}$
+                  {usuarioSeleccionado.ganancia.toFixed(2)}
+                </span>
+              </div>
+            </div>
+
+            <h4 className="usuario-modal-desglose-title">
+              🧾 Desglose de ingredientes
+            </h4>
+            {Object.keys(usuarioSeleccionado.detalle).length === 0 ? (
+              <div className="detalle-empty">
+                <div className="empty-icon">📭</div>
+                <p>Sin ingredientes en bodega para este menú</p>
+              </div>
+            ) : (
+              <table className="ig-table usuario-modal-table">
+                <thead>
+                  <tr>
+                    <th>Ingrediente</th>
+                    <th>Cantidad</th>
+                    <th>$/unidad</th>
+                    <th>Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(usuarioSeleccionado.detalle)
+                    .sort((a, b) => b[1].costoTotal - a[1].costoTotal)
+                    .map(([nombre, info]) => (
+                      <tr key={nombre}>
+                        <td data-label="Ingrediente" className="td-name">
+                          {nombre}
+                        </td>
+                        <td data-label="Cantidad" className="td-muted">
+                          {info.qty % 1 === 0 ? info.qty : info.qty.toFixed(1)}
+                          {info.unit}
+                        </td>
+                        <td data-label="$/unidad" className="td-muted">
+                          ${info.costoPorUnidad.toFixed(3)}
+                        </td>
+                        <td data-label="Total" className="td-gasto">
+                          ${info.costoTotal.toFixed(2)}
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <td colSpan="3">
+                      {Object.keys(usuarioSeleccionado.detalle).length}{" "}
+                      ingrediente
+                      {Object.keys(usuarioSeleccionado.detalle).length !== 1
+                        ? "s"
+                        : ""}
+                    </td>
+                    <td className="td-gasto">
+                      ${usuarioSeleccionado.costoMenu.toFixed(2)}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

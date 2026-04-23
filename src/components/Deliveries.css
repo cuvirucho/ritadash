@@ -381,6 +381,7 @@
 
 .del-btn-navegar,
 .del-btn-avisar,
+.del-btn-notificar,
 .del-btn-entregar {
   padding: 0.45rem 0.75rem;
   color: #fff;
@@ -404,18 +405,24 @@
   background: #25d366;
   box-shadow: 0 2px 6px rgba(37, 211, 102, 0.3);
 }
+.del-btn-notificar {
+  background: #f59e0b;
+  box-shadow: 0 2px 6px rgba(245, 158, 11, 0.3);
+}
 .del-btn-entregar {
   background: var(--success);
   box-shadow: 0 2px 6px rgba(52, 211, 153, 0.3);
 }
 .del-btn-navegar:hover,
 .del-btn-avisar:hover,
+.del-btn-notificar:hover,
 .del-btn-entregar:hover {
   opacity: 0.85;
   transform: translateY(-1px);
 }
 .del-btn-navegar:active,
 .del-btn-avisar:active,
+.del-btn-notificar:active,
 .del-btn-entregar:active {
   transform: translateY(0);
   opacity: 0.7;
@@ -531,6 +538,7 @@
   }
   .del-btn-navegar,
   .del-btn-avisar,
+  .del-btn-notificar,
   .del-btn-entregar {
     flex: 1 1 auto;
     min-width: 90px;
