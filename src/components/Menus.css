@@ -612,6 +612,71 @@
   transform: translateY(-1px);
 }
 
+/* ═══ Sin menú ═══ */
+.no-menu-section {
+  margin-top: 2.5rem;
+  background: #1e1b2e;
+  border: 1px solid #f59e0b55;
+  border-radius: 14px;
+  padding: 1.25rem 1.5rem;
+}
+.no-menu-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #fbbf24;
+  margin: 0 0 1rem;
+}
+.no-menu-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+.no-menu-user-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  background: #2a2540;
+  border-radius: 10px;
+  padding: 0.65rem 1rem;
+  flex-wrap: wrap;
+}
+.no-menu-user-info {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.user-plan-badge {
+  font-size: 0.72rem;
+  background: #3b3060;
+  color: #a78bfa;
+  border-radius: 6px;
+  padding: 2px 8px;
+  font-weight: 600;
+}
+.btn-notify {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  color: #1a1625;
+  border: none;
+  border-radius: 8px;
+  padding: 0.45rem 1rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+.btn-notify:hover:not(:disabled) {
+  opacity: 0.88;
+  transform: translateY(-1px);
+}
+.btn-notify-sent {
+  background: #1a3a1a;
+  color: #4ade80;
+  cursor: default;
+}
+
 /* ═══ Responsive ═══ */
 @media (max-width: 768px) {
   .menus-page {

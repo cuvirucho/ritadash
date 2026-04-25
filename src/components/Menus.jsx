@@ -4,14 +4,11 @@ import {
   collection,
   query,
   orderBy,
-  getDocs,
+  onSnapshot,
   addDoc,
 } from "firebase/firestore";
 import "./Menus.css";
 
-const CACHE_KEY = "rita_usuarios_cache";
-const CACHE_TS_KEY = "rita_usuarios_ts";
-const CACHE_TTL = 1000 * 60 * 60;
 const PAGE_SIZE = 5;
 const colRef = collection(db, "UsuariosActivos");
 
@@ -45,23 +42,6 @@ const DAY_LABELS = {
   dia3: "Miércoles",
   dia4: "Jueves",
   dia5: "Viernes",
-};
-
-// ── Cache helpers (shared with Dashboard) ──
-const loadCache = () => {
-  const raw = localStorage.getItem(CACHE_KEY);
-  const ts = localStorage.getItem(CACHE_TS_KEY);
-  if (!raw || !ts) return null;
-  if (Date.now() - Number(ts) > CACHE_TTL) return null;
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
-};
-const saveCache = (data) => {
-  localStorage.setItem(CACHE_KEY, JSON.stringify(data));
-  localStorage.setItem(CACHE_TS_KEY, Date.now().toString());
 };
 
 // ── Helpers ──
@@ -527,36 +507,53 @@ function Menus() {
     [allUsers],
   );
 
-  const fetchAll = async () => {
+  useEffect(() => {
     setLoading(true);
     const q = query(colRef, orderBy("createdAt"));
-    const snapshot = await getDocs(q);
-    const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-    saveCache(data);
-    setAllUsers(data);
-    setLoading(false);
-  };
-
-  useEffect(() => {
-    const cached = loadCache();
-    if (cached) {
-      setAllUsers(cached);
-    } else {
-      fetchAll();
-    }
+    const unsub = onSnapshot(
+      q,
+      (snapshot) => {
+        const data = snapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        }));
+        setAllUsers(data);
+        setLoading(false);
+      },
+      () => {
+        setLoading(false);
+      },
+    );
+    return () => unsub();
   }, []);
-
-  const handleRefresh = () => {
-    localStorage.removeItem(CACHE_KEY);
-    localStorage.removeItem(CACHE_TS_KEY);
-    setPage(1);
-    fetchAll();
-  };
 
   // Only users that have menus
   const usersWithMenus = useMemo(() => {
     return allUsers.filter((u) => u.menu?.menucreado);
   }, [allUsers]);
+
+  // Users WITHOUT menu assigned
+  const usersWithoutMenus = useMemo(() => {
+    return allUsers.filter((u) => !u.menu?.menucreado);
+  }, [allUsers]);
+
+  const [notifSent, setNotifSent] = useState({});
+
+  const handleSendReminder = useCallback(async (user) => {
+    console.log("enviarnot", user);
+
+    await fetch("https://apiapp-gq4hj2kfcq-uc.a.run.app/entregarMensaje", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        userId: user.id,
+        mensaje:
+          "Hola " +
+          getName(user) +
+          ", hemos notado que aún no tienes un menú asignado. Por favor, asigna tu menú a tiempo. ¡Gracias por ser parte de Rita! 🍽️",
+      }),
+    });
+  }, []);
 
   const filtered = useMemo(() => {
     if (!busqueda.trim()) return usersWithMenus;
@@ -585,13 +582,7 @@ function Menus() {
               usuarios con menú
             </p>
           </div>
-          <button
-            className="btn-refresh"
-            onClick={handleRefresh}
-            disabled={loading}
-          >
-            {loading ? "⏳ Actualizando..." : "↻ Actualizar datos"}
-          </button>
+          {loading && <span className="btn-refresh">⏳ Cargando...</span>}
         </div>
       </header>
 
@@ -644,6 +635,37 @@ function Menus() {
         <button className="btn-more" onClick={() => setPage((p) => p + 1)}>
           Cargar más ({filtered.length - usuarios.length} restantes)
         </button>
+      )}
+
+      {/* ── Usuarios sin menú ── */}
+      {!loading && usersWithoutMenus.length > 0 && (
+        <div className="no-menu-section">
+          <h2 className="no-menu-title">
+            ⚠️ Usuarios sin menú asignado ({usersWithoutMenus.length})
+          </h2>
+          <div className="no-menu-list">
+            {usersWithoutMenus.map((u) => (
+              <div key={u.id} className="no-menu-user-row">
+                <div className="no-menu-user-info">
+                  <span className="user-name">{getEmail(u)}</span>
+                  <span className="user-phone">📞 {getPhone(u)}</span>
+                  <span className="user-plan-badge">{getPlan(u.cart)}</span>
+                </div>
+                <button
+                  className={`btn-notify ${
+                    notifSent[u.id] ? "btn-notify-sent" : ""
+                  }`}
+                  onClick={() => handleSendReminder(u)}
+                  disabled={!!notifSent[u.id]}
+                >
+                  {notifSent[u.id]
+                    ? "✅ Notificación enviada"
+                    : "🔔 Enviar recordatorio"}
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
     </div>
   );
