@@ -8,7 +8,7 @@ import Compras from "./Compras";
 
 const TABS = [
   { key: "menus", label: "🍽️ Menús", component: Menus },
-  { key: "deliveries", label: "🚚 Deliveries", component: Deliveries },
+  { key: "deliveries", label: "🚚 Entregas", component: Deliveries },
   { key: "bodega", label: "📦 Bodega", component: Bodega },
   { key: "compras", label: "🛒 Compras", component: Compras },
   {

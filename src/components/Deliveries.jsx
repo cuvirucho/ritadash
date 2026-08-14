@@ -1,663 +1,579 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
-import { db } from "../firbase/Firebase";
-import { collection, getDocs, doc, deleteDoc } from "firebase/firestore";
-import { normalizarUsuario } from "../services/usuarios";
+// ── Entregas ──
+// Panel de los pedidos de delivery. Se alimenta EXCLUSIVAMENTE de la colección
+// Firestore `entregas`, en vivo: cuando un usuario ordena desde el menú semanal
+// su pedido aparece aquí solo, con todos los datos del documento.
+//
+// El campo `estado` que se mueve desde aquí es el mismo que el cliente ve en su
+// app como barra de seguimiento, así que los botones escriben en Firestore y
+// nada más — no hay estado en localStorage.
+
+import { Component, useMemo, useState } from "react";
+import {
+  ESTADOS_ENTREGA,
+  SIGUIENTE_ESTADO,
+  escalar,
+  etiquetaDia,
+  fechaHora,
+  iconoComida,
+  iconoEtiqueta,
+  indiceEstado,
+  infoEstado,
+  listaChips,
+  listaIngredientes,
+  useCambiarEstado,
+  useEntregas,
+  useTelefonos,
+} from "../services/entregas";
 import "./Deliveries.css";
 
-const COMIDA_LABELS = {
-  desayuno: { icon: "☀️", label: "Desayuno" },
-  snack_manana: { icon: "🍎", label: "Snack Mañana" },
-  snack1: { icon: "🍎", label: "Snack 1" },
-  almuerzo: { icon: "🍲", label: "Almuerzo" },
-  snack_tarde: { icon: "🥜", label: "Snack Tarde" },
-  snack2: { icon: "🥜", label: "Snack 2" },
-  cena: { icon: "🌙", label: "Cena" },
-};
+// Pestañas de filtrado. "activas" es lo que el admin mira todo el día: lo que
+// todavía tiene que salir de la cocina.
+const ACTIVOS = ["pendiente", "preparando", "en_camino"];
 
-// Map entrega comida names → the label saved in rita_entregas by Menus.jsx (MEAL_LABELS)
-// Menus.jsx saves: MEAL_LABELS[mealKey].label where mealKey ∈ {desayuno, snack1, almuerzo, snack2, cena}
-// Delivery data has comidas like: desayuno, snack_manana, almuerzo, snack_tarde, cena
-const COMIDA_TO_ENTREGAS_LABEL = {
-  desayuno: "Desayuno",
-  snack_manana: "Snack 1",
-  snack1: "Snack 1",
-  almuerzo: "Almuerzo",
-  snack_tarde: "Snack 2",
-  snack2: "Snack 2",
-  cena: "Cena",
-};
+const TABS = [
+  { key: "activas", label: "🔥 Activas", estados: ACTIVOS },
+  { key: "pendiente", label: "⏳ Pendientes", estados: ["pendiente"] },
+  { key: "preparando", label: "👩‍🍳 Preparando", estados: ["preparando"] },
+  { key: "en_camino", label: "🛵 En camino", estados: ["en_camino"] },
+  { key: "entregado", label: "✅ Entregadas", estados: ["entregado"] },
+  { key: "cancelado", label: "❌ Canceladas", estados: ["cancelado"] },
+];
 
-// Also build reverse: from rita_entregas label → normalized key for flexible matching
-const ENTREGAS_LABEL_NORMALIZE = {
-  Desayuno: "desayuno",
-  "Snack 1": "snack1",
-  "Snack Mañana": "snack1",
-  Almuerzo: "almuerzo",
-  "Snack 2": "snack2",
-  "Snack Tarde": "snack2",
-  Cena: "cena",
-};
+// Lo que se puede escribir en el buscador y contra qué se compara.
+const textoBuscable = (e) =>
+  [
+    e.nombre,
+    e.correo,
+    e.diaLabel,
+    e.ubicacion.direccion,
+    e.ubicacion.ciudad,
+    e.ubicacion.etiqueta,
+    e.ubicacion.referencia,
+    ...e.items.map((it) => `${it.nombre || ""} ${it.label || ""}`),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
 
 function Deliveries() {
-  const [allUsers, setAllUsers] = useState([]);
-  const [entregasListas, setEntregasListas] = useState([]);
+  const { entregas, cargando, error } = useEntregas();
+  const telefonos = useTelefonos();
+  const { mover, guardandoId } = useCambiarEstado();
+
+  const [tab, setTab] = useState("activas");
   const [busqueda, setBusqueda] = useState("");
-  const [filtroTab, setFiltroTab] = useState("todos");
-  const [entregados, setEntregados] = useState(() => {
-    try {
-      const saved = localStorage.getItem("rita_entregados");
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
-  const [loading, setLoading] = useState(true);
+  const [detalle, setDetalle] = useState(null);
 
-  // Cargar datos directamente desde Firebase
-  useEffect(() => {
-    setLoading(true);
-    Promise.all([
-      getDocs(collection(db, "UsuariosActivos")),
-      getDocs(collection(db, "platoslistos")),
-    ])
-      .then(([usersSnap, platosSnap]) => {
-        const users = usersSnap.docs.map((d) =>
-          normalizarUsuario({ id: d.id, ...d.data() }),
-        );
-        const platos = platosSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-        setAllUsers(users);
-        setEntregasListas(platos);
-      })
-      .catch((err) => console.error("Error cargando datos:", err))
-      .finally(() => setLoading(false));
-  }, []);
-
-  // Build a Set of "userId_comida" keys for fast lookup of kitchen-ready meals
-  const entregasSet = useMemo(() => {
-    const set = new Map();
-    entregasListas.forEach((e, idx) => {
-      // key: unique combo to match with delivery comidas
-      const key = `${e.userId}_${e.comida}`;
-      set.set(key, idx);
+  // Contadores por estado para las tarjetas de arriba y las pestañas.
+  const conteo = useMemo(() => {
+    const c = { total: entregas.length, activas: 0 };
+    ESTADOS_ENTREGA.forEach((e) => (c[e] = 0));
+    c.cancelado = 0;
+    entregas.forEach((e) => {
+      c[e.estado] = (c[e.estado] || 0) + 1;
+      if (ACTIVOS.includes(e.estado)) c.activas += 1;
     });
-    return set;
-  }, [entregasListas]);
+    return c;
+  }, [entregas]);
 
-  /*coinactrcon bakejnparacatulsir peido*/
+  // Filtro (pestaña + búsqueda) y orden por hora de entrega: lo más próximo
+  // primero. Lo que no tiene fecha se va al final, no se puede priorizar.
+  const listado = useMemo(() => {
+    const estados = TABS.find((t) => t.key === tab)?.estados || ACTIVOS;
+    const q = busqueda.trim().toLowerCase();
 
-  // ── enviar a bakeel cabo de esto*/ ──
-  const handlemarcarcmolistoabaken = async (d) => {
-    console.log(d, "--- datos para marcar como listo a baken ---");
-
-    try {
-      const res = await fetch(
-        "https://apiapp-gq4hj2kfcq-uc.a.run.app/entregarGrupo",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            userId: d.userId,
-            codigo: d.codigo,
-          }),
-        },
-      );
-
-      const data = await res.json();
-
-      if (data.success) {
-        alert("✅ Notificación enviada al usuario");
-      } else {
-        alert("❌ Error: " + (data.error || "desconocido"));
-      }
-    } catch (err) {
-      console.error("Error enviando notificación:", err);
-      alert("❌ No se pudo conectar con el servidor");
-    }
-  };
-
-  // Mark delivery as done: remove from rita_entregas
-  const handleHacerEntrega = useCallback((entregaIndex) => {
-    setEntregasListas((prev) => {
-      const removed = prev[entregaIndex];
-      const next = prev.filter((_, i) => i !== entregaIndex);
-      if (removed?.id) {
-        deleteDoc(doc(db, "platoslistos", removed.id)).catch((err) =>
-          console.error("Error eliminando de platoslistos:", err),
-        );
-      }
-      return next;
-    });
-  }, []);
-
-  // Mark ALL comidas of a delivery group as delivered at once
-  const handleEntregarTodo = useCallback(async (indices, deliveryData) => {
-    // Add to entregados section
-    setEntregados((prev) => {
-      const next = [
-        ...prev,
-        { ...deliveryData, entregadoAt: new Date().toLocaleTimeString() },
-      ];
-      localStorage.setItem("rita_entregados", JSON.stringify(next));
-      return next;
-    });
-
-    // Enviar a baken
-    await handlemarcarcmolistoabaken(deliveryData);
-
-    setEntregasListas((prev) => {
-      const toRemove = new Set(indices);
-      prev.forEach((item, i) => {
-        if (toRemove.has(i) && item?.id) {
-          deleteDoc(doc(db, "platoslistos", item.id)).catch((err) =>
-            console.error("Error eliminando de platoslistos:", err),
-          );
-        }
+    return entregas
+      .filter((e) => estados.includes(e.estado))
+      .filter((e) => !q || textoBuscable(e).includes(q))
+      .sort((a, b) => {
+        if (a.programadaMs == null) return 1;
+        if (b.programadaMs == null) return -1;
+        return a.programadaMs - b.programadaMs;
       });
-      const next = prev.filter((_, i) => !toRemove.has(i));
-      return next;
+  }, [entregas, tab, busqueda]);
+
+  // Separadores "Hoy" / "Mañana" / "12 ago" dentro de la lista ya ordenada.
+  const grupos = useMemo(() => {
+    const out = [];
+    listado.forEach((e) => {
+      const dia = etiquetaDia(e.programadaMs);
+      const ultimo = out[out.length - 1];
+      if (ultimo?.dia === dia) ultimo.entregas.push(e);
+      else out.push({ dia, entregas: [e] });
     });
-  }, []);
-
-  // Flatten all entregas into individual delivery items, sorted by hour
-  const allDeliveries = useMemo(() => {
-    const items = [];
-    for (const u of allUsers) {
-      const entregas = u.entregas;
-      if (!entregas?.length) continue;
-      for (const e of entregas) {
-        // For each comida, check if it's in rita_entregas (listo en cocina)
-        const comidaStatuses = (e.comidas || []).map((c) => {
-          const info = COMIDA_LABELS[c] || { icon: "🍽️", label: c };
-          // Normalize delivery comida to a canonical key
-          const normalizedKey = COMIDA_TO_ENTREGAS_LABEL[c]
-            ? ENTREGAS_LABEL_NORMALIZE[COMIDA_TO_ENTREGAS_LABEL[c]] || c
-            : c;
-          // Find matching entry in rita_entregas by userId + normalized comida key
-          const entregaIdx = entregasListas.findIndex((el) => {
-            if (el.userId !== u.id) return false;
-            // Normalize the stored label to the same canonical key
-            const storedKey = ENTREGAS_LABEL_NORMALIZE[el.comida] || el.comida;
-            return storedKey === normalizedKey;
-          });
-          return {
-            comida: c,
-            ...info,
-            listoEnCocina: entregaIdx !== -1,
-            entregaIndex: entregaIdx,
-          };
-        });
-
-        const allReady =
-          comidaStatuses.length > 0 &&
-          comidaStatuses.every((s) => s.listoEnCocina);
-        const anyReady = comidaStatuses.some((s) => s.listoEnCocina);
-        const readyIndices = comidaStatuses
-          .filter((s) => s.listoEnCocina)
-          .map((s) => s.entregaIndex);
-
-        items.push({
-          userId: u.id,
-          nombre: u.nombre,
-          email: u.correo,
-          phone: u.telefono,
-          plan: u.plan,
-          periodo: e.periodo || "manana",
-          horaExacta: e.horaExacta || "00:00",
-          codigo: e.codigo || "",
-          ubicacion: e.ubicacion,
-          comidaStatuses,
-          allReady,
-          anyReady,
-          readyIndices,
-        });
-      }
-    }
-    items.sort((a, b) => a.horaExacta.localeCompare(b.horaExacta));
-
-    // Exclude items already in entregados
-    const entregadosKeys = new Set(
-      entregados.map((e) => `${e.userId}_${e.codigo}_${e.horaExacta}`),
-    );
-    return items.filter(
-      (d) => !entregadosKeys.has(`${d.userId}_${d.codigo}_${d.horaExacta}`),
-    );
-  }, [allUsers, entregasListas, entregados]);
-
-  // Filter by search
-  const searchFiltered = useMemo(() => {
-    if (!busqueda.trim()) return allDeliveries;
-    const q = busqueda.toLowerCase();
-    return allDeliveries.filter(
-      (d) =>
-        d.nombre.toLowerCase().includes(q) ||
-        d.email.toLowerCase().includes(q) ||
-        d.phone.includes(q) ||
-        d.codigo.includes(q) ||
-        d.ubicacion?.direccion?.toLowerCase().includes(q),
-    );
-  }, [allDeliveries, busqueda]);
-
-  // Group by periodo
-  const manana = useMemo(
-    () => searchFiltered.filter((d) => d.periodo === "manana"),
-    [searchFiltered],
-  );
-  const tarde = useMemo(
-    () => searchFiltered.filter((d) => d.periodo === "tarde"),
-    [searchFiltered],
-  );
-
-  const displayed =
-    filtroTab === "manana"
-      ? manana
-      : filtroTab === "tarde"
-        ? tarde
-        : searchFiltered;
-
-  // Counts
-  const readyCount = allDeliveries.filter((d) => d.allReady).length;
-  const pendingCount = allDeliveries.filter((d) => !d.allReady).length;
-
-  // When no more pending deliveries and there are entregados, reset everything
-  useEffect(() => {
-    if (allDeliveries.length === 0 && entregados.length > 0) {
-      const timer = setTimeout(() => {
-        setEntregados([]);
-        localStorage.removeItem("rita_entregados");
-        // Reload desde Firebase
-        Promise.all([
-          getDocs(collection(db, "UsuariosActivos")),
-          getDocs(collection(db, "platoslistos")),
-        ])
-          .then(([usersSnap, platosSnap]) => {
-            setAllUsers(
-              usersSnap.docs.map((d) =>
-                normalizarUsuario({ id: d.id, ...d.data() }),
-              ),
-            );
-            setEntregasListas(
-              platosSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
-            );
-          })
-          .catch((err) => console.error("Error recargando datos:", err));
-      }, 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [allDeliveries.length, entregados.length]);
+    return out;
+  }, [listado]);
 
   return (
     <div className="deliveries">
       <header className="deliveries-header">
-        <h1>🚚 Entregas del Día</h1>
+        <h1>🚚 Entregas</h1>
         <p className="subtitle">
-          Organizadas por hora — platos listos en cocina se marcan desde Menús
+          Pedidos de la colección <code>entregas</code>, en tiempo real. Al
+          cambiar el estado, el usuario lo ve al instante en su app.
         </p>
-        {loading && (
-          <p className="subtitle">⏳ Cargando datos desde Firebase...</p>
-        )}
       </header>
 
-      {/* ── CARDS ── */}
+      {/* ── RESUMEN ── */}
       <div className="del-cards">
-        <div className="del-card">
-          <div className="del-card-icon">📦</div>
-          <div className="del-card-info">
-            <span className="del-card-label">Total Entregas</span>
-            <span className="del-card-value accent">
-              {allDeliveries.length}
-            </span>
-          </div>
-        </div>
-        <div className="del-card">
-          <div className="del-card-icon">✅</div>
-          <div className="del-card-info">
-            <span className="del-card-label">Listas en cocina</span>
-            <span className="del-card-value success">{readyCount}</span>
-          </div>
-        </div>
-        <div className="del-card">
-          <div className="del-card-icon">⏳</div>
-          <div className="del-card-info">
-            <span className="del-card-label">Pendientes cocina</span>
-            <span className="del-card-value danger">{pendingCount}</span>
-          </div>
-        </div>
-        <div className="del-card">
-          <div className="del-card-icon">🌅</div>
-          <div className="del-card-info">
-            <span className="del-card-label">Mañana / Tarde</span>
-            <span className="del-card-value premium">
-              {manana.length} / {tarde.length}
-            </span>
-          </div>
-        </div>
+        <ResumenCard icono="📦" label="Total" valor={conteo.total} tono="accent" />
+        <ResumenCard icono="⏳" label="Pendientes" valor={conteo.pendiente} tono="warn" />
+        <ResumenCard icono="👩‍🍳" label="Preparando" valor={conteo.preparando} tono="premium" />
+        <ResumenCard icono="🛵" label="En camino" valor={conteo.en_camino} tono="accent" />
+        <ResumenCard icono="✅" label="Entregadas" valor={conteo.entregado} tono="success" />
       </div>
 
-      {/* ── PERIOD TABS ── */}
+      {/* ── PESTAÑAS ── */}
       <div className="del-tabs">
-        <button
-          className={`del-tab ${filtroTab === "todos" ? "active" : ""}`}
-          onClick={() => setFiltroTab("todos")}
-        >
-          Todas ({searchFiltered.length})
-        </button>
-        <button
-          className={`del-tab del-tab-manana ${filtroTab === "manana" ? "active" : ""}`}
-          onClick={() => setFiltroTab("manana")}
-        >
-          🌅 Mañana ({manana.length})
-        </button>
-        <button
-          className={`del-tab del-tab-tarde ${filtroTab === "tarde" ? "active" : ""}`}
-          onClick={() => setFiltroTab("tarde")}
-        >
-          🌇 Tarde ({tarde.length})
-        </button>
+        {TABS.map((t) => (
+          <button
+            key={t.key}
+            className={`del-tab ${tab === t.key ? "active" : ""}`}
+            onClick={() => setTab(t.key)}
+          >
+            {t.label} (
+            {t.key === "activas"
+              ? conteo.activas
+              : (conteo[t.estados[0]] ?? 0)}
+            )
+          </button>
+        ))}
       </div>
 
-      {/* ── SEARCH ── */}
+      {/* ── BÚSQUEDA ── */}
       <div className="del-toolbar">
         <input
           className="del-search"
           type="text"
-          placeholder="🔍 Buscar por email, teléfono, código o dirección..."
+          placeholder="🔍 Buscar por nombre, correo, dirección, día o plato..."
           value={busqueda}
-          onChange={(e) => setBusqueda(e.target.value)}
+          onChange={(ev) => setBusqueda(ev.target.value)}
         />
         <span className="del-result-count">
-          {displayed.length} entrega{displayed.length !== 1 ? "s" : ""}
+          {listado.length} entrega{listado.length !== 1 ? "s" : ""}
         </span>
       </div>
 
-      {/* ── DELIVERY LIST ── */}
-      {displayed.length === 0 ? (
+      {/* ── LISTA ── */}
+      {cargando ? (
+        <div className="del-empty">
+          <div className="del-empty-icon">⏳</div>
+          <h2>Cargando entregas…</h2>
+        </div>
+      ) : error ? (
+        <div className="del-empty del-empty-error">
+          <div className="del-empty-icon">😕</div>
+          <h2>No pudimos leer las entregas</h2>
+          <p>Revisa la conexión o los permisos de Firestore.</p>
+        </div>
+      ) : listado.length === 0 ? (
         <div className="del-empty">
           <div className="del-empty-icon">📭</div>
-          <h2>No hay entregas</h2>
+          <h2>No hay entregas aquí</h2>
           <p>
-            {allUsers.length === 0
-              ? "No hay usuarios con entregas registradas en Firebase."
-              : "Ninguna entrega coincide con tu búsqueda."}
+            {busqueda.trim()
+              ? "Ninguna entrega coincide con tu búsqueda."
+              : entregas.length === 0
+                ? "Todavía no hay pedidos en la colección entregas."
+                : "No hay pedidos en este estado."}
           </p>
         </div>
       ) : (
         <div className="del-list">
-          {filtroTab === "todos" && manana.length > 0 && (
-            <div className="del-section-title">
-              <span className="del-section-icon">🌅</span> Entregas Mañana
-              <span className="del-section-count">{manana.length}</span>
+          {grupos.map((g) => (
+            <div key={g.dia}>
+              <div className="del-section-title">
+                <span className="del-section-icon">📅</span> {g.dia}
+                <span className="del-section-count">{g.entregas.length}</span>
+              </div>
+              {g.entregas.map((e) => (
+                <ErrorBoundary
+                  key={e.id}
+                  mensaje={`No se pudo mostrar el pedido de ${e.nombre}.`}
+                >
+                  <EntregaCard
+                    entrega={e}
+                    telefono={telefonos.get(e.uid)}
+                    guardando={guardandoId === e.id}
+                    onMover={mover}
+                    onDetalle={() => setDetalle(e)}
+                  />
+                </ErrorBoundary>
+              ))}
             </div>
-          )}
-          {(filtroTab === "todos"
-            ? manana
-            : filtroTab === "manana"
-              ? manana
-              : []
-          ).map((d, i) => (
-            <DeliveryCard
-              key={`m-${i}`}
-              delivery={d}
-              onHacerEntrega={handleHacerEntrega}
-              onEntregarTodo={handleEntregarTodo}
-            />
-          ))}
-
-          {filtroTab === "todos" && tarde.length > 0 && (
-            <div className="del-section-title del-section-tarde">
-              <span className="del-section-icon">🌇</span> Entregas Tarde
-              <span className="del-section-count">{tarde.length}</span>
-            </div>
-          )}
-          {(filtroTab === "todos"
-            ? tarde
-            : filtroTab === "tarde"
-              ? tarde
-              : []
-          ).map((d, i) => (
-            <DeliveryCard
-              key={`t-${i}`}
-              delivery={d}
-              onHacerEntrega={handleHacerEntrega}
-              onEntregarTodo={handleEntregarTodo}
-            />
           ))}
         </div>
       )}
 
-      {/* ── PRODUCTOS ENTREGADOS ── */}
-      {entregados.length > 0 && (
-        <div className="del-entregados-section">
-          <div className="del-section-title del-section-entregados">
-            <span className="del-section-icon">✅</span> Productos Entregados
-            <span className="del-section-count">{entregados.length}</span>
-          </div>
-          <div className="del-list">
-            {entregados.map((d, i) => (
-              <div key={`e-${i}`} className="del-card-entrega del-entregado">
-                <div className="del-card-entrega-left">
-                  <div className="del-hora-big">{d.horaExacta}</div>
-                  <span
-                    className={`del-periodo-badge del-periodo-${d.periodo}`}
-                  >
-                    {d.periodo === "manana" ? "🌅 Mañana" : "🌇 Tarde"}
-                  </span>
-                </div>
-                <div className="del-card-entrega-center">
-                  <div className="del-card-entrega-user">
-                    <span className="del-user-name-inline">{d.nombre}</span>
-                    <span className="del-user-email-inline">{d.email}</span>
-                    {d.phone && (
-                      <span className="del-user-phone-inline">
-                        📞 {d.phone}
-                      </span>
-                    )}
-                    <span className={`del-badge-sm del-badge-${d.plan.color}`}>
-                      {d.plan.label}
-                    </span>
-                  </div>
-                  <div className="del-comidas-status">
-                    {d.comidaStatuses.map((c, ci) => (
-                      <div
-                        key={ci}
-                        className="del-comida-item del-comida-delivered"
-                      >
-                        <span className="del-comida-icon">{c.icon}</span>
-                        <span className="del-comida-name">{c.label}</span>
-                        <span className="del-comida-status-badge">
-                          ✅ Entregado
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                  {d.ubicacion && (
-                    <div className="del-ubicacion">
-                      <span className="del-ubicacion-icon">📍</span>
-                      <span>{d.ubicacion.direccion || "Sin dirección"}</span>
-                    </div>
-                  )}
-                </div>
-                <div className="del-card-entrega-right">
-                  <span className="del-codigo"># {d.codigo}</span>
-                  <div className="del-status-overall del-all-delivered">
-                    ✅ Entregado
-                  </div>
-                  <span className="del-entregado-time">🕐 {d.entregadoAt}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-          {allDeliveries.length === 0 && (
-            <div className="del-reset-notice">
-              <p>
-                🎉 ¡Todas las entregas completadas! Reiniciando en 3 segundos...
-              </p>
-            </div>
-          )}
-        </div>
+      {detalle && (
+        <ErrorBoundary
+          mensaje="No se pudo mostrar el detalle de este pedido."
+          onCerrar={() => setDetalle(null)}
+        >
+          <ModalDetalle entrega={detalle} onCerrar={() => setDetalle(null)} />
+        </ErrorBoundary>
       )}
     </div>
   );
 }
 
-function DeliveryCard({ delivery: d, onHacerEntrega, onEntregarTodo }) {
-  const handleNavegar = () => {
-    const loc = d.ubicacion;
-    if (loc?.lat && loc?.lng) {
-      window.open(
-        `https://www.google.com/maps/dir/?api=1&destination=${loc.lat},${loc.lng}`,
-        "_blank",
-      );
-    } else if (loc?.direccion) {
-      window.open(
-        `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(loc.direccion)}`,
-        "_blank",
-      );
-    }
-  };
+function ResumenCard({ icono, label, valor, tono }) {
+  return (
+    <div className="del-card">
+      <div className="del-card-icon">{icono}</div>
+      <div className="del-card-info">
+        <span className="del-card-label">{label}</span>
+        <span className={`del-card-value ${tono}`}>{valor ?? 0}</span>
+      </div>
+    </div>
+  );
+}
 
-  const handleAvisarLlegada = () => {
-    const tel = d.phone?.replace(/\D/g, "");
-    const msg = encodeURIComponent(
-      `¡Hola! 🚚 Tu comida de Rita ha llegado. Por favor recógela. Código: #${d.codigo}`,
+/* ------------------------------------------------------------------ */
+/* Tarjeta de entrega                                                  */
+/* ------------------------------------------------------------------ */
+
+function EntregaCard({ entrega: e, telefono, guardando, onMover, onDetalle }) {
+  const estado = infoEstado(e.estado);
+  const siguiente = SIGUIENTE_ESTADO[e.estado];
+  const { lat, lng, direccion } = e.ubicacion;
+
+  const navegar = () => {
+    const destino =
+      lat && lng ? `${lat},${lng}` : encodeURIComponent(direccion || "");
+    if (!destino) return;
+    window.open(
+      `https://www.google.com/maps/dir/?api=1&destination=${destino}`,
+      "_blank",
     );
-    if (tel) {
-      window.open(`https://wa.me/${tel}?text=${msg}`, "_blank");
-    } else {
-      alert("Este usuario no tiene número de teléfono registrado.");
-    }
   };
-  console.log(d, "--- entrega data ---");
 
-  // ── envia notificación ──
-  const handleEnviarNotificacion = async () => {
-    try {
-      const res = await fetch(
-        "https://apiapp-gq4hj2kfcq-uc.a.run.app/entregarComida",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            userId: d.userId,
-            codigo: d.codigo,
-          }),
-        },
-      );
-
-      const data = await res.json();
-
-      if (data.success) {
-        alert("✅ Notificación enviada al usuario");
-      } else {
-        alert("❌ Error: " + (data.error || "desconocido"));
-      }
-    } catch (err) {
-      console.error("Error enviando notificación:", err);
-      alert("❌ No se pudo conectar con el servidor");
-    }
+  const whatsapp = () => {
+    const tel = String(telefono).replace(/\D/g, "");
+    const platos = e.items.map((it) => it.nombre || it.label).join(", ");
+    const msg = encodeURIComponent(
+      `¡Hola ${e.nombre}! 🛵 Tu pedido de Rita (${platos}) va en camino a ${e.ubicacion.etiqueta || "tu dirección"}.`,
+    );
+    window.open(`https://wa.me/${tel}?text=${msg}`, "_blank");
   };
 
   return (
-    <div className={`del-card-entrega ${d.allReady ? "del-ready" : ""}`}>
+    <div className={`del-card-entrega del-estado-${e.estado}`}>
+      {/* ── Cuándo ── */}
       <div className="del-card-entrega-left">
-        <div className="del-hora-big">{d.horaExacta}</div>
-        <span className={`del-periodo-badge del-periodo-${d.periodo}`}>
-          {d.periodo === "manana" ? "🌅 Mañana" : "🌇 Tarde"}
+        <div className="del-hora-big">{e.entrega.hora}</div>
+        <span className="del-fecha-badge">{etiquetaDia(e.programadaMs)}</span>
+        <span className={`del-tipo-badge del-tipo-${e.entrega.tipo}`}>
+          {e.entrega.tipo === "ahora" ? "⚡ Ahora" : "🕐 Programada"}
         </span>
       </div>
 
+      {/* ── Quién y qué ── */}
       <div className="del-card-entrega-center">
         <div className="del-card-entrega-user">
-          <span className="del-user-name-inline">{d.nombre}</span>
-          <span className="del-user-email-inline">{d.email}</span>
-          {d.phone && (
-            <span className="del-user-phone-inline">📞 {d.phone}</span>
+          <span className="del-user-name-inline">{e.nombre}</span>
+          <span className="del-user-email-inline">{e.correo}</span>
+          {telefono && (
+            <span className="del-user-phone-inline">📞 {telefono}</span>
           )}
-          <span className={`del-badge-sm del-badge-${d.plan.color}`}>
-            {d.plan.label}
+          <span className={`del-badge-sm del-badge-${e.plan.color}`}>
+            {e.plan.label}
           </span>
         </div>
 
-        {/* Comidas con estado cocina */}
-        <div className="del-comidas-status">
-          {d.comidaStatuses.map((c, ci) => (
-            <div
-              key={ci}
-              className={`del-comida-item ${
-                c.listoEnCocina ? "del-comida-ready" : "del-comida-pending"
-              }`}
-            >
-              <span className="del-comida-icon">{c.icon}</span>
-              <span className="del-comida-name">{c.label}</span>
-              <span className="del-comida-status-badge">
-                {c.listoEnCocina ? "👨‍🍳 Listo" : "⏳ En cocina"}
-              </span>
-              {c.listoEnCocina && (
-                <div
-                  className="del-btn-entregar-comida"
-                  title="Marcar esta comida como entregada"
-                >
-                  ✓
-                </div>
-              )}
-            </div>
-          ))}
+        <div className="del-chips">
+          {e.diaLabel && <span className="del-chip">📆 {e.diaLabel}</span>}
+          {e.origen && <span className="del-chip del-chip-origen">{e.origen}</span>}
         </div>
 
-        {d.ubicacion && (
-          <div className="del-ubicacion">
-            <span className="del-ubicacion-icon">📍</span>
-            <span>{d.ubicacion.direccion || "Sin dirección"}</span>
-            {d.ubicacion.referencia && (
-              <span className="del-referencia">
-                {" "}
-                — Ref: {d.ubicacion.referencia}
-              </span>
+        <div className="del-items">
+          {e.items.length === 0 ? (
+            <div className="del-item del-item-vacio">Sin platos en el pedido</div>
+          ) : (
+            e.items.map((it, i) => {
+              // Todo lo que viene de la IA pasa por escalar(): un objeto suelto
+              // en el JSX tumbaría la lista entera.
+              const kcal = escalar(it.calorias);
+              return (
+                <div className="del-item" key={`${it.comida}-${i}`}>
+                  <span className="del-item-icon">{iconoComida(it.comida)}</span>
+                  <span className="del-item-label">{it.label || it.comida}</span>
+                  <span className="del-item-nombre">{it.nombre || "—"}</span>
+                  {kcal != null && (
+                    <span className="del-item-cal">{kcal} kcal</span>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        <div className="del-ubicacion">
+          <span className="del-ubicacion-icon">
+            {iconoEtiqueta(e.ubicacion.etiqueta)}
+          </span>
+          <span>
+            {e.ubicacion.etiqueta && (
+              <strong>{e.ubicacion.etiqueta} · </strong>
             )}
-          </div>
-        )}
+            {direccion || "Sin dirección"}
+            {e.ubicacion.ciudad ? `, ${e.ubicacion.ciudad}` : ""}
+          </span>
+          {e.ubicacion.referencia && (
+            <span className="del-referencia"> — Ref: {e.ubicacion.referencia}</span>
+          )}
+        </div>
       </div>
 
+      {/* ── Estado y acciones ── */}
       <div className="del-card-entrega-right">
-        <span className="del-codigo"># {d.codigo}</span>
-        <div
-          className={`del-status-overall ${d.allReady ? "del-all-ready" : d.anyReady ? "del-partial" : "del-none-ready"}`}
-        >
-          {d.allReady ? "✅ Lista" : d.anyReady ? "🔶 Parcial" : "🔴 No lista"}
+        <div className={`del-status-overall del-status-${e.estado}`}>
+          {estado.icono} {estado.label}
         </div>
+
+        {/* El mismo recorrido de 4 pasos que ve el cliente en su app. */}
+        {e.estado !== "cancelado" && (
+          <div className="del-stepper" title={estado.desc}>
+            {ESTADOS_ENTREGA.map((paso, i) => (
+              <span
+                key={paso}
+                className={`del-step ${i <= indiceEstado(e.estado) ? "is-on" : ""}`}
+              />
+            ))}
+          </div>
+        )}
+
         <div className="del-action-buttons">
-          {d.ubicacion && (d.ubicacion.lat || d.ubicacion.direccion) && (
-            <button
-              className="del-btn-navegar"
-              onClick={handleNavegar}
-              title="Abrir en Google Maps para navegar"
-            >
+          {(lat || direccion) && (
+            <button className="del-btn-navegar" onClick={navegar} title="Abrir en Google Maps">
               🗺️ Navegar
             </button>
           )}
-          <button
-            className="del-btn-avisar"
-            onClick={handleAvisarLlegada}
-            title="Avisar al usuario por WhatsApp que llegó su comida"
-          >
-            📲 Mesaje whasp
-          </button>
 
-          <button
-            className="del-btn-notificar"
-            onClick={handleEnviarNotificacion}
-            title="Enviar notificación push al usuario"
-          >
-            🔔 Enviar notificación
-          </button>
-
-          {d.allReady && (
-            <button
-              className="del-btn-entregar"
-              onClick={() => onEntregarTodo(d.readyIndices, d)}
-            >
-              🚚 Hacer entrega
+          {telefono && (
+            <button className="del-btn-avisar" onClick={whatsapp} title="Escribir por WhatsApp">
+              📲 WhatsApp
             </button>
           )}
+
+          <button className="del-btn-detalle" onClick={onDetalle}>
+            👁️ Ver detalle
+          </button>
+
+          {siguiente && (
+            <button
+              className="del-btn-avanzar"
+              disabled={guardando}
+              onClick={() => onMover(e.id, siguiente)}
+            >
+              {guardando
+                ? "Guardando…"
+                : `${infoEstado(siguiente).icono} ${infoEstado(siguiente).label}`}
+            </button>
+          )}
+
+          {!e.esFinal && (
+            <button
+              className="del-btn-cancelar"
+              disabled={guardando}
+              onClick={() => {
+                if (confirm(`¿Cancelar el pedido de ${e.nombre}?`)) {
+                  onMover(e.id, "cancelado");
+                }
+              }}
+            >
+              ❌ Cancelar
+            </button>
+          )}
+
+          {/* Salida de emergencia para un clic equivocado: devuelve el pedido
+              al último paso activo en vez de dejarlo cerrado por error. */}
+          {e.esFinal && (
+            <button
+              className="del-btn-deshacer"
+              disabled={guardando}
+              onClick={() =>
+                onMover(e.id, e.estado === "entregado" ? "en_camino" : "pendiente")
+              }
+            >
+              ↩ Deshacer
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Modal de detalle: TODO lo que trae el documento                     */
+/* ------------------------------------------------------------------ */
+
+function Campo({ label, valor }) {
+  // Un objeto se aplana antes de pintarlo: ni crashea ni sale "[object Object]".
+  const texto = typeof valor === "object" && valor !== null ? escalar(valor) : valor;
+  if (texto === undefined || texto === null || texto === "") return null;
+  return (
+    <div className="del-modal-field">
+      <span className="del-modal-field-label">{label}</span>
+      <span className="del-modal-field-value">{String(texto)}</span>
+    </div>
+  );
+}
+
+/**
+ * Bloque de etiquetas. Recibe el array YA normalizado por listaIngredientes()
+ * o listaChips(), porque los campos de la IA son objetos, no arrays.
+ */
+function Lista({ label, valores }) {
+  if (!valores?.length) return null;
+  return (
+    <div className="del-modal-lista">
+      <span className="del-modal-field-label">{label}</span>
+      <div className="del-modal-tags">
+        {valores.map((v, i) => (
+          <span className="del-modal-tag" key={`${v}-${i}`}>
+            {v}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Un documento con una forma inesperada (los platos los escribe un LLM, no hay
+ * esquema que lo garantice) debe romper como mucho su propia tarjeta. Sin esto,
+ * un solo campo raro deja el panel entero en negro.
+ */
+class ErrorBoundary extends Component {
+  state = { fallo: false };
+
+  static getDerivedStateFromError() {
+    return { fallo: true };
+  }
+
+  componentDidCatch(error, info) {
+    console.error("[Entregas] no se pudo pintar", error, info);
+  }
+
+  render() {
+    if (this.state.fallo) {
+      return (
+        <div className="del-error-box">
+          <span>⚠️ {this.props.mensaje || "No se pudo mostrar este contenido."}</span>
+          {/* Sin esto el aviso del modal se quedaría fijo: el padre sigue
+              creyendo que hay un detalle abierto. */}
+          {this.props.onCerrar && (
+            <button onClick={this.props.onCerrar}>Cerrar</button>
+          )}
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+function ModalDetalle({ entrega: e, onCerrar }) {
+  const estado = infoEstado(e.estado);
+  const u = e.ubicacion;
+
+  return (
+    <div className="del-modal-overlay" onClick={onCerrar}>
+      <div className="del-modal" onClick={(ev) => ev.stopPropagation()}>
+        <div className="del-modal-header">
+          <h2>
+            {estado.icono} Pedido de {e.nombre}
+          </h2>
+          <button className="del-modal-close" onClick={onCerrar}>
+            ✕
+          </button>
+        </div>
+
+        <div className="del-modal-body">
+          <section className="del-modal-section">
+            <h3>👤 Usuario</h3>
+            <Campo label="Nombre" valor={e.nombre} />
+            <Campo label="Correo" valor={e.correo} />
+            <Campo label="Plan" valor={e.plan.label} />
+            <Campo label="UID" valor={e.uid} />
+            <Campo label="ID del documento" valor={e.id} />
+          </section>
+
+          <section className="del-modal-section">
+            <h3>🛵 Entrega</h3>
+            <Campo label="Estado" valor={`${estado.label} (${e.estado})`} />
+            <Campo label="Hora" valor={e.entrega.hora} />
+            <Campo
+              label="Tipo"
+              valor={e.entrega.tipo === "ahora" ? "Ahora" : "Programada"}
+            />
+            <Campo label="Para mañana" valor={e.entrega.paraManana ? "Sí" : "No"} />
+            <Campo label="Fecha (ISO)" valor={e.entrega.fechaISO} />
+            <Campo label="Programada para" valor={fechaHora(e.programadaMs)} />
+            <Campo label="Día del menú" valor={`${e.diaLabel} (${e.dia})`} />
+            <Campo label="Origen" valor={e.origen} />
+            <Campo label="Creada en" valor={fechaHora(e.creadaMs)} />
+            {e.canceladaMs && (
+              <Campo label="Cancelada en" valor={fechaHora(e.canceladaMs)} />
+            )}
+          </section>
+
+          <section className="del-modal-section">
+            <h3>
+              {iconoEtiqueta(u.etiqueta)} Ubicación
+            </h3>
+            <Campo label="Etiqueta" valor={u.etiqueta} />
+            <Campo label="Dirección" valor={u.direccion} />
+            <Campo label="Ciudad" valor={u.ciudad} />
+            <Campo label="Referencia" valor={u.referencia} />
+            <Campo
+              label="Coordenadas"
+              valor={u.lat != null && u.lng != null ? `${u.lat}, ${u.lng}` : ""}
+            />
+            <Campo label="Predeterminada" valor={u.predeterminada ? "Sí" : "No"} />
+            <Campo label="ID dirección" valor={u.id} />
+            <Campo label="Creada en" valor={fechaHora(u.creadaMs)} />
+            <Campo label="Actualizada en" valor={fechaHora(u.actualizadaMs)} />
+          </section>
+
+          <section className="del-modal-section">
+            <h3>🍽️ Platos ({e.items.length})</h3>
+            {e.items.map((it, i) => {
+              // `calorias` es escalar pero `proteinas` es { total: "30 g" }:
+              // pintarlo tal cual era lo que dejaba la pantalla en negro.
+              const kcal = escalar(it.calorias);
+              const proteina = escalar(it.proteinas);
+              return (
+                <div className="del-modal-plato" key={`${it.comida}-${i}`}>
+                  <div className="del-modal-plato-head">
+                    <span className="del-item-icon">{iconoComida(it.comida)}</span>
+                    <strong>{it.nombre || "Sin nombre"}</strong>
+                    <span className="del-modal-plato-tipo">
+                      {it.label || it.comida}
+                    </span>
+                  </div>
+                  {it.descripcion && (
+                    <p className="del-modal-plato-desc">{it.descripcion}</p>
+                  )}
+                  <div className="del-modal-macros">
+                    {kcal != null && (
+                      <span className="del-modal-macro">🔥 {kcal} kcal</span>
+                    )}
+                    {proteina != null && (
+                      <span className="del-modal-macro">💪 {proteina} proteína</span>
+                    )}
+                  </div>
+                  <Lista
+                    label="Ingredientes"
+                    valores={listaIngredientes(it.ingredientes)}
+                  />
+                  <Lista label="Vitaminas" valores={listaChips(it.vitaminas)} />
+                  <Lista label="Minerales" valores={listaChips(it.minerales)} />
+                </div>
+              );
+            })}
+          </section>
         </div>
       </div>
     </div>
