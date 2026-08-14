@@ -1,3 +1,33 @@
+/* ── Variables globales del tema ── */
+:root {
+  --bg: #0b0e14;
+  --surface: #151921;
+  --surface-2: #1c2130;
+  --surface-hover: #1f2538;
+  --border: #252b3b;
+  --text: #e4e8f1;
+  --text-muted: #6b7280;
+  --accent: #818cf8;
+  --accent-bg: rgba(129, 140, 248, 0.1);
+  --premium: #fbbf24;
+  --premium-bg: rgba(251, 191, 36, 0.1);
+  --starter: #22d3ee;
+  --starter-bg: rgba(34, 211, 238, 0.1);
+  --free: #94a3b8;
+  --free-bg: rgba(148, 163, 184, 0.1);
+  --success: #34d399;
+  --success-bg: rgba(52, 211, 153, 0.08);
+  --danger: #f87171;
+  --danger-bg: rgba(248, 113, 113, 0.08);
+  --warn: #fb923c;
+  --warn-bg: rgba(251, 146, 60, 0.1);
+  --income: #a78bfa;
+  --income-bg: rgba(167, 139, 250, 0.1);
+  --radius: 14px;
+  --radius-sm: 8px;
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.3), 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
 *,
 *::before,
 *::after {

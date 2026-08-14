@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { db } from "../firbase/Firebase";
 import { collection, getDocs, doc, deleteDoc } from "firebase/firestore";
+import { normalizarUsuario } from "../services/usuarios";
 import "./Deliveries.css";
 
 const COMIDA_LABELS = {
@@ -37,11 +38,6 @@ const ENTREGAS_LABEL_NORMALIZE = {
   Cena: "cena",
 };
 
-const getEmail = (u) =>
-  u.datapayphone?.email || u.datapayphone?.optionalParameter2 || "Sin email";
-const getPhone = (u) =>
-  u.datapayphone?.optionalParameter1 || u.datapayphone?.phoneNumber || "";
-
 function Deliveries() {
   const [allUsers, setAllUsers] = useState([]);
   const [entregasListas, setEntregasListas] = useState([]);
@@ -65,7 +61,9 @@ function Deliveries() {
       getDocs(collection(db, "platoslistos")),
     ])
       .then(([usersSnap, platosSnap]) => {
-        const users = usersSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        const users = usersSnap.docs.map((d) =>
+          normalizarUsuario({ id: d.id, ...d.data() }),
+        );
         const platos = platosSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
         setAllUsers(users);
         setEntregasListas(platos);
@@ -164,7 +162,7 @@ function Deliveries() {
   const allDeliveries = useMemo(() => {
     const items = [];
     for (const u of allUsers) {
-      const entregas = u.ubicacines?.entregas;
+      const entregas = u.entregas;
       if (!entregas?.length) continue;
       for (const e of entregas) {
         // For each comida, check if it's in rita_entregas (listo en cocina)
@@ -199,9 +197,10 @@ function Deliveries() {
 
         items.push({
           userId: u.id,
-          email: getEmail(u),
-          phone: getPhone(u),
-          plan: u.cart?.nombre || "Sin plan",
+          nombre: u.nombre,
+          email: u.correo,
+          phone: u.telefono,
+          plan: u.plan,
           periodo: e.periodo || "manana",
           horaExacta: e.horaExacta || "00:00",
           codigo: e.codigo || "",
@@ -230,6 +229,7 @@ function Deliveries() {
     const q = busqueda.toLowerCase();
     return allDeliveries.filter(
       (d) =>
+        d.nombre.toLowerCase().includes(q) ||
         d.email.toLowerCase().includes(q) ||
         d.phone.includes(q) ||
         d.codigo.includes(q) ||
@@ -270,7 +270,11 @@ function Deliveries() {
           getDocs(collection(db, "platoslistos")),
         ])
           .then(([usersSnap, platosSnap]) => {
-            setAllUsers(usersSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
+            setAllUsers(
+              usersSnap.docs.map((d) =>
+                normalizarUsuario({ id: d.id, ...d.data() }),
+              ),
+            );
             setEntregasListas(
               platosSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
             );
@@ -440,16 +444,15 @@ function Deliveries() {
                 </div>
                 <div className="del-card-entrega-center">
                   <div className="del-card-entrega-user">
+                    <span className="del-user-name-inline">{d.nombre}</span>
                     <span className="del-user-email-inline">{d.email}</span>
                     {d.phone && (
                       <span className="del-user-phone-inline">
                         📞 {d.phone}
                       </span>
                     )}
-                    <span
-                      className={`del-badge-sm ${d.plan === "Plan Premium" ? "del-badge-premium" : "del-badge-starter"}`}
-                    >
-                      {d.plan}
+                    <span className={`del-badge-sm del-badge-${d.plan.color}`}>
+                      {d.plan.label}
                     </span>
                   </div>
                   <div className="del-comidas-status">
@@ -564,14 +567,13 @@ function DeliveryCard({ delivery: d, onHacerEntrega, onEntregarTodo }) {
 
       <div className="del-card-entrega-center">
         <div className="del-card-entrega-user">
+          <span className="del-user-name-inline">{d.nombre}</span>
           <span className="del-user-email-inline">{d.email}</span>
           {d.phone && (
             <span className="del-user-phone-inline">📞 {d.phone}</span>
           )}
-          <span
-            className={`del-badge-sm ${d.plan === "Plan Premium" ? "del-badge-premium" : "del-badge-starter"}`}
-          >
-            {d.plan}
+          <span className={`del-badge-sm del-badge-${d.plan.color}`}>
+            {d.plan.label}
           </span>
         </div>
 

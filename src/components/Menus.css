@@ -32,6 +32,14 @@
   margin: 0.3rem 0 0;
   font-size: 0.85rem;
 }
+.menus-page .btn-refresh {
+  padding: 0.55rem 1.3rem;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+}
 
 /* Toolbar */
 .menus-toolbar {
@@ -184,6 +192,14 @@
 .menu-user-meta .badge-starter {
   background: var(--starter-bg);
   color: var(--starter);
+}
+.menu-user-meta .badge-free {
+  background: var(--free-bg);
+  color: var(--free);
+}
+.menu-user-meta .badge-desconocido {
+  background: var(--warn-bg);
+  color: var(--warn);
 }
 
 .ready-badge {

@@ -90,50 +90,9 @@ function Bodega() {
       .catch((err) => console.error("Error cargando comprasIds:", err));
   }, []);
 
-  // Función para verificar y actualizar lista de compras
-  // Solo AGREGA items nuevos con stock bajo; nunca elimina los existentes
-  const actualizarListaCompras = useCallback(async (listaIngredientes) => {
-    try {
-      const snap = await getDoc(doc(db, "compras", "lista_compras"));
-      const existing = snap.exists() ? (snap.data().items || []) : [];
-      const existingIds = new Set(existing.map((c) => c.id));
-
-      setComprasIds(existing.map((c) => c.id));
-
-      const nuevosItems = listaIngredientes
-        .filter((i) => {
-          if (existingIds.has(i.id)) return false;
-          const cantMax = i.cantidadMaxima;
-          const cantMin = i.cantidadMinima ?? (cantMax ? cantMax * 0.25 : 0);
-          return cantMax && i.cantidad <= cantMin;
-        })
-        .map((i) => ({
-          id: i.id,
-          nombre: i.nombre,
-          cantidadActual: i.cantidad ?? 0,
-          cantidadComprar: i.cantidadMinima ?? 0,
-          unidad: i.unidad ?? "ud",
-          costoPorUnidad: i.costoPorUnidad ?? 0,
-          costoPaquete: i.costoTotal ?? 0,
-        }));
-
-      if (nuevosItems.length === 0) return;
-
-      const updated = [...existing, ...nuevosItems];
-      setComprasIds(updated.map((c) => c.id));
-      setDoc(doc(db, "compras", "lista_compras"), {
-        items: updated,
-        updatedAt: new Date(),
-      }).catch((error) => console.error(error));
-    } catch (err) {
-      console.error("Error actualizando lista de compras:", err);
-    }
-  }, []);
-
-  // Actualizar lista de compras cuando cambian los ingredientes
-  useEffect(() => {
-    actualizarListaCompras(ingredientes);
-  }, [ingredientes, actualizarListaCompras]);
+  // Ya no se genera aquí la lista de compras por stock bajo: esa regla ahora
+  // corre en vivo en services/compras.js, que además la cruza con lo que piden
+  // los menús. Este documento guarda SOLO los agregados manuales (botón 🛒).
 
   // Form state
   const [nombre, setNombre] = useState("");
@@ -240,15 +199,16 @@ function Bodega() {
     await guardarEnFirebase(nuevos);
   };
 
-  // Enviar manualmente a compras
+  // Enviar manualmente a compras (para lo que no pide ningún menú)
   const handleEnviarACompras = useCallback(async (ing) => {
-    const cantMax = ing.cantidadMaxima;
+    const cantidad = ing.cantidad ?? 0;
+    const falta = Math.max(0, (ing.cantidadMaxima ?? 0) - cantidad);
     const compraItem = {
       id: ing.id,
       nombre: ing.nombre,
-      cantidadActual: ing.cantidad ?? 0,
-      cantidadComprar:
-        (cantMax ?? ing.cantidadOriginal ?? 0) - (ing.cantidad ?? 0),
+      cantidadActual: cantidad,
+      // Sin máximo declarado no hay cuánto reponer: se usa la última compra
+      cantidadComprar: falta || ing.cantidadUltimaCompra || cantidad || 0,
       unidad: ing.unidad ?? "ud",
       costoPorUnidad: ing.costoPorUnidad ?? 0,
       costoPaquete: ing.costoTotal ?? 0,
@@ -622,7 +582,7 @@ function Bodega() {
                         <span className="td-nombre-text">{ing.nombre}</span>
                         {comprasIds.includes(ing.id) && (
                           <span className="en-compras-badge">
-                            🛒 en compras
+                            ✋ agregado a compras
                           </span>
                         )}
                       </td>

@@ -1,33 +1,41 @@
 import { useEffect, useState, useMemo, useCallback } from "react";
 import { db } from "../firbase/Firebase";
-import {
-  collection,
-  query,
-  orderBy,
-  onSnapshot,
-  addDoc,
-} from "firebase/firestore";
+import { collection, onSnapshot, addDoc } from "firebase/firestore";
+import { normalizarUsuario } from "../services/usuarios";
 import "./Menus.css";
 
 const PAGE_SIZE = 5;
 const colRef = collection(db, "UsuariosActivos");
 
-const MEAL_ORDER = ["desayuno", "snack1", "almuerzo", "snack2", "cena"];
+// Los menús nuevos usan las claves `snack` y `bebida`; los legados, snack1/snack2.
+const MEAL_ORDER = [
+  "desayuno",
+  "snack1",
+  "snack",
+  "almuerzo",
+  "bebida",
+  "snack2",
+  "cena",
+];
 const MEAL_LABELS = {
   desayuno: { icon: "☀️", label: "Desayuno" },
   snack1: { icon: "🍎", label: "Snack 1" },
+  snack: { icon: "🍎", label: "Snack" },
   almuerzo: { icon: "🍲", label: "Almuerzo" },
+  bebida: { icon: "🥤", label: "Bebida" },
   snack2: { icon: "🥜", label: "Snack 2" },
   cena: { icon: "🌙", label: "Cena" },
 };
 
-// Map delivery comida names → menu keys
+// Map delivery comida names → posibles claves del menú (nuevas y legadas).
+// Se usa la primera que exista en el día que se está viendo.
 const COMIDA_TO_MEAL = {
-  desayuno: "desayuno",
-  snack_manana: "snack1",
-  almuerzo: "almuerzo",
-  snack_tarde: "snack2",
-  cena: "cena",
+  desayuno: ["desayuno"],
+  snack_manana: ["snack1", "snack"],
+  almuerzo: ["almuerzo"],
+  snack_tarde: ["snack2", "snack"],
+  bebida: ["bebida"],
+  cena: ["cena"],
 };
 
 const PERIODO_LABELS = {
@@ -36,21 +44,23 @@ const PERIODO_LABELS = {
   noche: "🌙 Noche",
 };
 
+// Los menús nuevos usan lunes..viernes; los legados, dia1..dia5.
+// El orden de este objeto es el orden de las pestañas de día.
 const DAY_LABELS = {
+  lunes: "Lunes",
   dia1: "Lunes",
+  martes: "Martes",
   dia2: "Martes",
+  miercoles: "Miércoles",
   dia3: "Miércoles",
+  jueves: "Jueves",
   dia4: "Jueves",
+  viernes: "Viernes",
   dia5: "Viernes",
 };
 
-// ── Helpers ──
-const getEmail = (u) =>
-  u.datapayphone?.email || u.datapayphone?.optionalParameter2 || "—";
-const getPhone = (u) =>
-  u.datapayphone?.optionalParameter1 || u.datapayphone?.phoneNumber || "—";
-const getName = (u) => u.datapayphone?.optionalParameter4 || "Sin nombre";
-const getPlan = (cart) => cart?.nombre || "Sin plan";
+// Los usuarios llegan ya normalizados (normalizarUsuario): nombre, correo,
+// telefono, plan {label, color}, menuCreado y entregas son campos planos.
 
 // ── Meal Card ──
 function MealCard({ mealKey, meal, checked, onToggle }) {
@@ -100,10 +110,27 @@ function MealCard({ mealKey, meal, checked, onToggle }) {
   );
 }
 
-// ── Get current day key based on today's weekday ──
-const getCurrentDayKey = () => {
-  const dayMap = [null, "dia1", "dia2", "dia3", "dia4", "dia5", null]; // Dom=0, Lun=1...Sab=6
-  return dayMap[new Date().getDay()] || "dia1";
+// ── Día de hoy, con la clave que realmente use el menú del usuario ──
+const DIA_SEMANA = [
+  null,
+  ["lunes", "dia1"],
+  ["martes", "dia2"],
+  ["miercoles", "dia3"],
+  ["jueves", "dia4"],
+  ["viernes", "dia5"],
+  null,
+];
+
+const getCurrentDayKey = (menu) => {
+  const candidatos = DIA_SEMANA[new Date().getDay()] || ["lunes", "dia1"];
+  if (menu) {
+    const existente = candidatos.find((k) => menu[k]);
+    if (existente) return existente;
+    // Fin de semana o el menú no tiene el día de hoy: primer día disponible
+    const primero = Object.keys(DAY_LABELS).find((k) => menu[k]);
+    if (primero) return primero;
+  }
+  return candidatos[0];
 };
 
 // ── Delivery Group with collapsible meals ──
@@ -214,11 +241,12 @@ function UserMenuSection({
   expanded,
   onToggleExpand,
 }) {
-  const [activeDay, setActiveDay] = useState(() => getCurrentDayKey());
+  const menu = user.menuCreado;
+  const [activeDay, setActiveDay] = useState(() => getCurrentDayKey(menu));
 
-  const menu = user.menu?.menucreado;
-  const hasDays = menu && Object.keys(menu).length > 0;
-  const days = hasDays ? Object.keys(DAY_LABELS).filter((d) => menu[d]) : [];
+  // Solo las claves que son días reales; `resumen_semanal` y demás se ignoran.
+  const days = menu ? Object.keys(DAY_LABELS).filter((d) => menu[d]) : [];
+  const hasDays = days.length > 0;
 
   const currentDay = menu?.[activeDay];
   const meals = currentDay ? MEAL_ORDER.filter((m) => currentDay[m]) : [];
@@ -230,7 +258,7 @@ function UserMenuSection({
   const readyMeals = dispatch?._readyMeals || {};
 
   // Group meals by delivery slot
-  const entregas = user.ubicacines?.entregas || [];
+  const entregas = user.entregas || [];
   const deliveryGroups = useMemo(() => {
     if (entregas.length === 0) {
       // No delivery info → each meal is its own group
@@ -246,8 +274,8 @@ function UserMenuSection({
     const assigned = new Set();
     entregas.forEach((ent, idx) => {
       const mealKeys = (ent.comidas || [])
-        .map((c) => COMIDA_TO_MEAL[c] || c)
-        .filter((m) => currentDay?.[m]);
+        .map((c) => (COMIDA_TO_MEAL[c] || [c]).find((k) => currentDay?.[k]))
+        .filter(Boolean);
       if (mealKeys.length === 0) return;
       mealKeys.forEach((m) => assigned.add(m));
       // Sort by MEAL_ORDER
@@ -284,18 +312,17 @@ function UserMenuSection({
         <div className="menu-user-info">
           <span className="user-number">{index + 1}</span>
           <div className="user-details">
-            <span className="user-name">{getEmail(user)}</span>
-            <span className="user-phone">📞 {getPhone(user)}</span>
+            <span className="user-name">{user.nombre}</span>
+            <span className="user-email">✉️ {user.correo}</span>
+            <span className="user-phone">📞 {user.telefono}</span>
           </div>
         </div>
         <div className="menu-user-meta">
           <span className="delivery-counter">
             🚚 {Object.keys(readyMeals).length}/25 entregados
           </span>
-          <span
-            className={`badge ${getPlan(user.cart) === "Plan Premium" ? "badge-premium" : "badge-starter"}`}
-          >
-            {getPlan(user.cart)}
+          <span className={`badge badge-${user.plan.color}`}>
+            {user.plan.label}
           </span>
           <span className={`toggle-icon ${expanded ? "open" : ""}`}>▼</span>
         </div>
@@ -411,13 +438,13 @@ function Menus() {
     (userId, day, mealKey) => {
       // Guardar en log de entregas con info del usuario y plato
       const user = allUsers.find((u) => u.id === userId);
-      const mealData = user?.menu?.menucreado?.[day]?.[mealKey];
+      const mealData = user?.menuCreado?.[day]?.[mealKey];
       const entrega = {
         userId,
-        email: getEmail(user),
-        telefono: getPhone(user),
-        nombre: getName(user),
-        plan: getPlan(user?.cart),
+        email: user?.correo || "—",
+        telefono: user?.telefono || "—",
+        nombre: user?.nombre || "Sin nombre",
+        plan: user?.plan?.label || "Sin plan",
         dia: DAY_LABELS[day] || day,
         comida: MEAL_LABELS[mealKey]?.label || mealKey,
         plato: mealData?.nombre || "—",
@@ -509,14 +536,14 @@ function Menus() {
 
   useEffect(() => {
     setLoading(true);
-    const q = query(colRef, orderBy("createdAt"));
+    // Sin orderBy: Firestore excluye los documentos sin ese campo y los
+    // usuarios nuevos no traen createdAt. Se ordena en cliente.
     const unsub = onSnapshot(
-      q,
+      colRef,
       (snapshot) => {
-        const data = snapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        }));
+        const data = snapshot.docs
+          .map((doc) => normalizarUsuario({ id: doc.id, ...doc.data() }))
+          .sort((a, b) => (b.fechaRegistro || 0) - (a.fechaRegistro || 0));
         setAllUsers(data);
         setLoading(false);
       },
@@ -529,30 +556,33 @@ function Menus() {
 
   // Only users that have menus
   const usersWithMenus = useMemo(() => {
-    return allUsers.filter((u) => u.menu?.menucreado);
+    return allUsers.filter((u) => u.tieneMenu);
   }, [allUsers]);
 
   // Users WITHOUT menu assigned
   const usersWithoutMenus = useMemo(() => {
-    return allUsers.filter((u) => !u.menu?.menucreado);
+    return allUsers.filter((u) => !u.tieneMenu);
   }, [allUsers]);
 
   const [notifSent, setNotifSent] = useState({});
 
   const handleSendReminder = useCallback(async (user) => {
-    console.log("enviarnot", user);
-
-    await fetch("https://apiapp-gq4hj2kfcq-uc.a.run.app/entregarMensaje", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        userId: user.id,
-        mensaje:
-          "Hola " +
-          getName(user) +
-          ", hemos notado que aún no tienes un menú asignado. Por favor, asigna tu menú a tiempo. ¡Gracias por ser parte de Rita! 🍽️",
-      }),
-    });
+    try {
+      await fetch("https://apiapp-gq4hj2kfcq-uc.a.run.app/entregarMensaje", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: user.id,
+          mensaje:
+            "Hola " +
+            user.nombre +
+            ", hemos notado que aún no tienes un menú asignado. Por favor, asigna tu menú a tiempo. ¡Gracias por ser parte de Rita! 🍽️",
+        }),
+      });
+      setNotifSent((prev) => ({ ...prev, [user.id]: true }));
+    } catch (err) {
+      console.error("Error enviando recordatorio:", err);
+    }
   }, []);
 
   const filtered = useMemo(() => {
@@ -560,11 +590,9 @@ function Menus() {
     const q = busqueda.toLowerCase();
     return usersWithMenus.filter(
       (u) =>
-        (u.datapayphone?.email || "").toLowerCase().includes(q) ||
-        (u.datapayphone?.optionalParameter2 || "").toLowerCase().includes(q) ||
-        (u.datapayphone?.optionalParameter1 || "").includes(q) ||
-        (u.datapayphone?.optionalParameter4 || "").toLowerCase().includes(q) ||
-        (u.datapayphone?.phoneNumber || "").includes(q),
+        u.nombre.toLowerCase().includes(q) ||
+        u.correo.toLowerCase().includes(q) ||
+        u.telefono.toLowerCase().includes(q),
     );
   }, [usersWithMenus, busqueda]);
 
@@ -647,9 +675,10 @@ function Menus() {
             {usersWithoutMenus.map((u) => (
               <div key={u.id} className="no-menu-user-row">
                 <div className="no-menu-user-info">
-                  <span className="user-name">{getEmail(u)}</span>
-                  <span className="user-phone">📞 {getPhone(u)}</span>
-                  <span className="user-plan-badge">{getPlan(u.cart)}</span>
+                  <span className="user-name">{u.nombre}</span>
+                  <span className="user-email">✉️ {u.correo}</span>
+                  <span className="user-phone">📞 {u.telefono}</span>
+                  <span className="user-plan-badge">{u.plan.label}</span>
                 </div>
                 <button
                   className={`btn-notify ${

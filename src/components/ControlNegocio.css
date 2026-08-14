@@ -1,0 +1,1102 @@
+/* ══════════════════════════════════════════════════════════════
+   Control del Negocio — usuarios + finanzas en una sola página
+   Los tokens (--surface, --premium, …) viven en src/index.css
+   ══════════════════════════════════════════════════════════════ */
+
+/* ── Modal de clave ── */
+.clave-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(12px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.clave-modal {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 1.2rem;
+  padding: 2.5rem 2rem;
+  text-align: center;
+  max-width: 380px;
+  width: 90%;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+}
+.clave-modal-icon {
+  font-size: 3rem;
+  margin-bottom: 0.5rem;
+}
+.clave-modal h2 {
+  color: var(--text);
+  margin: 0 0 0.3rem;
+  font-size: 1.4rem;
+}
+.clave-modal p {
+  color: var(--text-muted);
+  margin: 0 0 1.5rem;
+  font-size: 0.95rem;
+}
+.clave-input {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border-radius: 0.6rem;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  font-size: 1rem;
+  outline: none;
+  transition: border-color 0.2s;
+}
+.clave-input:focus {
+  border-color: var(--accent);
+}
+.clave-input-error {
+  border-color: var(--danger) !important;
+}
+.clave-error-msg {
+  display: block;
+  color: var(--danger);
+  font-size: 0.85rem;
+  margin-top: 0.5rem;
+}
+.clave-modal-buttons {
+  display: flex;
+  gap: 0.8rem;
+  margin-top: 1.5rem;
+}
+.clave-btn-back,
+.clave-btn-enter {
+  flex: 1;
+  padding: 0.65rem 1rem;
+  border: none;
+  border-radius: 0.6rem;
+  font-size: 0.95rem;
+  cursor: pointer;
+  font-weight: 600;
+  transition: opacity 0.2s;
+}
+.clave-btn-back {
+  background: var(--surface-hover);
+  color: var(--text-muted);
+}
+.clave-btn-enter {
+  background: var(--accent);
+  color: #0b0e14;
+}
+.clave-btn-back:hover,
+.clave-btn-enter:hover {
+  opacity: 0.85;
+}
+
+/* ── Layout ── */
+.negocio {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 2.5rem 2rem;
+  color: var(--text);
+  font-family:
+    "Inter",
+    system-ui,
+    -apple-system,
+    sans-serif;
+  min-height: 100vh;
+}
+
+.negocio-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+.negocio-header h1 {
+  font-size: 1.6rem;
+  font-weight: 700;
+  margin: 0;
+  letter-spacing: -0.02em;
+}
+.subtitle {
+  color: var(--text-muted);
+  margin: 0.3rem 0 0;
+  font-size: 0.85rem;
+}
+.header-stamp {
+  opacity: 0.75;
+}
+.header-actions {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+.btn-refresh,
+.btn-volver-menu {
+  padding: 0.55rem 1.3rem;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: inherit;
+}
+.btn-refresh:hover,
+.btn-volver-menu:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-bg);
+}
+.btn-refresh:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ── Secciones ── */
+.negocio-seccion {
+  margin-bottom: 2.5rem;
+}
+.seccion-titulo {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+  padding-bottom: 0.6rem;
+  border-bottom: 1px solid var(--border);
+}
+.seccion-titulo h2 {
+  font-size: 1.05rem;
+  font-weight: 700;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+.seccion-hint {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.2rem 1.4rem;
+  box-shadow: var(--shadow);
+}
+.panel h3 {
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin: 0 0 0.75rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* ── Cards de usuarios ── */
+.cards {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.25rem;
+  cursor: pointer;
+  transition: all 0.25s;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  box-shadow: var(--shadow);
+  text-align: left;
+  font-family: inherit;
+  color: inherit;
+}
+.card:hover {
+  transform: translateY(-2px);
+  background: var(--surface-hover);
+}
+.card.active {
+  border-color: var(--accent);
+  box-shadow:
+    0 0 0 1px var(--accent),
+    var(--shadow);
+}
+.card-icon {
+  font-size: 1.8rem;
+  line-height: 1;
+}
+.card-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+.card-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+.card-value {
+  font-size: 1.65rem;
+  font-weight: 800;
+  line-height: 1;
+}
+.card-sub {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+}
+.card-total .card-value {
+  color: var(--accent);
+}
+.card-premium .card-value {
+  color: var(--premium);
+}
+.card-starter .card-value {
+  color: var(--starter);
+}
+.card-free .card-value {
+  color: var(--free);
+}
+.card-desconocido .card-value {
+  color: var(--warn);
+}
+.card-income .card-value {
+  color: var(--income);
+}
+.card-income {
+  cursor: default;
+}
+.card-cobros .card-value {
+  color: var(--warn);
+}
+.card-cobros,
+.card-margen {
+  cursor: default;
+}
+
+/* ── Modalidad de cobro ── */
+.modalidad-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+}
+.card-mod-semanal .card-value {
+  color: var(--accent);
+}
+.card-mod-mensual .card-value {
+  color: var(--income);
+}
+.card-margen .card-value {
+  font-size: 1.5rem;
+}
+
+.modalidad-badge {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+.modalidad-badge.semanal {
+  background: var(--accent-bg);
+  color: var(--accent);
+}
+.modalidad-badge.mensual {
+  background: var(--income-bg);
+  color: var(--income);
+}
+/* El campo no existe en Firestore: se está asumiendo */
+.modalidad-badge.asumida {
+  background: var(--warn-bg);
+  color: var(--warn);
+  border-color: var(--warn);
+  border-style: dashed;
+}
+
+.est-tag {
+  margin-left: 0.35rem;
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  background: var(--warn-bg);
+  color: var(--warn);
+  padding: 0.05rem 0.3rem;
+  border-radius: 4px;
+}
+
+.aviso-plan {
+  background: var(--warn-bg);
+  border: 1px solid var(--warn);
+  color: var(--warn);
+  border-radius: var(--radius-sm);
+  padding: 0.7rem 1rem;
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+.aviso-faltantes {
+  margin-top: 1rem;
+}
+
+/* ── Panel de cobros sin registrar ── */
+.aviso-registro {
+  margin-top: 1.25rem;
+  text-align: left;
+}
+.aviso-registro strong {
+  display: block;
+  margin-bottom: 0.35rem;
+  font-size: 0.85rem;
+}
+.aviso-registro p {
+  color: var(--text-muted);
+  margin-bottom: 0.75rem;
+}
+.aviso-registro em {
+  color: var(--warn);
+  font-style: normal;
+  font-weight: 600;
+}
+.lista-registro {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  margin-bottom: 0.9rem;
+}
+.lista-registro li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  color: var(--text);
+}
+.link-usuario {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--text);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.link-usuario:hover {
+  color: var(--accent);
+}
+.falta-tag {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.7rem;
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--warn);
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+}
+.falta-inline {
+  color: var(--warn);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+.btn-inline {
+  margin: 0;
+  display: inline-block;
+}
+
+.aviso-plan code {
+  background: rgba(0, 0, 0, 0.25);
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+}
+
+/* ── Barra apilada (planes y finanzas) ── */
+.bar-wrapper {
+  display: flex;
+  height: 28px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--surface-2);
+}
+.bar-seg {
+  transition: width 0.4s ease;
+  min-width: 2px;
+}
+.bar-premium {
+  background: var(--premium);
+}
+.bar-starter {
+  background: var(--starter);
+}
+.bar-free {
+  background: var(--free);
+}
+.bar-desconocido {
+  background: var(--warn);
+}
+.bar-ingreso {
+  background: var(--success);
+}
+.bar-gasto-compras {
+  background: var(--danger);
+}
+.bar-gasto-menus {
+  background: var(--warn);
+}
+.bar-labels {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  margin-top: 0.5rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+.bar-labels span {
+  font-weight: 600;
+}
+.label-premium {
+  color: var(--premium);
+}
+.label-starter {
+  color: var(--starter);
+}
+.label-free {
+  color: var(--free);
+}
+.label-desconocido {
+  color: var(--warn);
+}
+.label-ingreso {
+  color: var(--success);
+}
+.label-gasto-compras {
+  color: var(--danger);
+}
+.label-gasto-menus {
+  color: var(--warn);
+}
+
+.tabla-planes {
+  margin-top: 1.25rem;
+}
+
+/* ── Tasa de conversión ── */
+.conversion-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 1.25rem;
+  padding: 0.9rem 1.1rem;
+  background: var(--accent-bg);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+}
+.conversion-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+.conversion-detalle {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+.conversion-valor {
+  font-size: 1.6rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+/* ── Toolbar ── */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+.search-input {
+  flex: 1;
+  max-width: 400px;
+  padding: 0.6rem 1rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 0.85rem;
+  outline: none;
+  transition: border-color 0.2s;
+  font-family: inherit;
+}
+.search-input::placeholder {
+  color: var(--text-muted);
+}
+.search-input:focus {
+  border-color: var(--accent);
+}
+.result-count {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.table-wrapper {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  padding: 0 0.5rem;
+}
+
+.btn-more {
+  display: block;
+  margin: 1rem auto 0;
+  padding: 0.6rem 1.6rem;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: inherit;
+}
+.btn-more:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-bg);
+}
+
+/* ── Filtros de período ── */
+.negocio-filtros {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 1.5rem;
+}
+.negocio-filtros select,
+.negocio-filtros input {
+  padding: 0.45rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.84rem;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.2s;
+}
+.negocio-filtros select:focus,
+.negocio-filtros input:focus {
+  border-color: var(--accent);
+}
+.filtro-range-label {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+/* ── Métricas ── */
+.negocio-metricas {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+.metrica-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem 1.1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  box-shadow: var(--shadow);
+}
+.metrica-icon {
+  font-size: 1.5rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.metrica-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+.metrica-label {
+  font-size: 0.67rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+.metrica-valor {
+  font-size: 1.15rem;
+  font-weight: 800;
+  line-height: 1.1;
+  color: var(--text);
+}
+.metrica-sub {
+  font-size: 0.66rem;
+  color: var(--text-muted);
+}
+.metrica-verde {
+  color: var(--success);
+}
+.metrica-rojo {
+  color: var(--danger);
+}
+
+/* ── Cards financieras ── */
+.negocio-resumen {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+.resumen-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.2rem 1.4rem;
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  box-shadow: var(--shadow);
+}
+.resumen-card .card-icon {
+  font-size: 2rem;
+}
+.resumen-card .card-value {
+  font-size: 1.5rem;
+}
+.resumen-card.ingreso .card-value {
+  color: var(--success);
+}
+.resumen-card.gasto .card-value {
+  color: var(--danger);
+}
+.resumen-card.menu-cost .card-value {
+  color: var(--warn);
+}
+.resumen-card.balance .card-value {
+  color: var(--accent);
+}
+.balance-positivo .card-value {
+  color: var(--success) !important;
+}
+.balance-negativo .card-value {
+  color: var(--danger) !important;
+}
+
+/* ── Tarjetas de detalle ── */
+.negocio-detalle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+}
+.detalle-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.2rem 1.4rem;
+  box-shadow: var(--shadow);
+  overflow-x: auto;
+}
+.detalle-card h3 {
+  font-size: 0.95rem;
+  font-weight: 700;
+  margin: 0 0 1rem;
+}
+.detalle-card h3 span {
+  margin-right: 0.4rem;
+}
+.detalle-nota {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin: -0.5rem 0 1rem;
+  line-height: 1.5;
+}
+.btn-limpiar {
+  margin-left: auto;
+  background: var(--warn-bg);
+  border: 1px solid var(--warn);
+  color: var(--warn);
+  border-radius: var(--radius-sm);
+  padding: 0.3rem 0.7rem;
+  font-size: 0.75rem;
+  font-family: inherit;
+  cursor: pointer;
+}
+.btn-limpiar:hover {
+  opacity: 0.8;
+}
+.modal-sub {
+  display: block;
+  font-size: 0.66rem;
+  font-weight: 500;
+  font-style: normal;
+  color: var(--text-muted);
+  margin-top: 0.15rem;
+}
+.detalle-empty {
+  text-align: center;
+  padding: 2rem 1rem;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+.detalle-empty .empty-icon {
+  font-size: 2rem;
+  margin-bottom: 0.5rem;
+}
+
+/* ── Tablas ── */
+.ig-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.ig-table thead th {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  font-weight: 500;
+  padding: 0.5rem 0.6rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.ig-table tbody td {
+  padding: 0.6rem;
+  font-size: 0.82rem;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+.ig-table tbody tr:hover {
+  background: var(--surface-hover);
+}
+.ig-table .td-name {
+  font-weight: 600;
+}
+.ig-table .td-ingreso {
+  color: var(--success);
+  font-weight: 700;
+}
+.ig-table .td-gasto {
+  color: var(--danger);
+  font-weight: 700;
+}
+.ig-table .td-muted {
+  color: var(--text-muted);
+}
+.ig-table tfoot td {
+  padding: 0.75rem 0.6rem;
+  border-top: 2px solid var(--border);
+  font-weight: 700;
+}
+.td-sub {
+  display: block;
+  font-size: 0.66rem;
+  opacity: 0.7;
+}
+
+.plan-badge {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: 20px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+.plan-badge.premium {
+  background: var(--premium-bg);
+  color: var(--premium);
+}
+.plan-badge.starter {
+  background: var(--starter-bg);
+  color: var(--starter);
+}
+.plan-badge.free {
+  background: var(--free-bg);
+  color: var(--free);
+}
+.plan-badge.desconocido {
+  background: var(--warn-bg);
+  color: var(--warn);
+}
+
+.pago-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  white-space: nowrap;
+}
+.pago-tag.vigente {
+  color: var(--success);
+}
+.pago-tag.vencido {
+  color: var(--danger);
+}
+.vencido-tag {
+  background: var(--danger-bg);
+  color: var(--danger);
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+}
+.menu-si {
+  color: var(--success);
+}
+.menu-no {
+  color: var(--text-muted);
+}
+
+/* ── Fila clickable ── */
+.tr-clickable {
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.tr-clickable:hover {
+  background: var(--accent-bg) !important;
+}
+/* Este usuario pierde dinero: es el dato que antes quedaba oculto */
+.fila-perdida td {
+  background: var(--danger-bg);
+}
+.fila-perdida .td-name {
+  box-shadow: inset 3px 0 0 var(--danger);
+  padding-left: 0.85rem;
+}
+/* Le falta activatedAt o modalidad en Firestore */
+.tr-alerta .td-name {
+  box-shadow: inset 3px 0 0 var(--warn);
+  padding-left: 0.85rem;
+}
+.td-click-hint {
+  margin-left: 0.4rem;
+  opacity: 0;
+  font-size: 0.8rem;
+  color: var(--accent);
+  transition: opacity 0.15s;
+}
+.tr-clickable:hover .td-click-hint {
+  opacity: 1;
+}
+
+/* ── Modal de usuario ── */
+.usuario-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+.usuario-modal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 1.2rem;
+  padding: 2rem;
+  max-width: 620px;
+  width: 100%;
+  max-height: 85vh;
+  overflow-y: auto;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
+  position: relative;
+}
+.usuario-modal-close {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 0.85rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+}
+.usuario-modal-close:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+.usuario-modal-header {
+  margin-bottom: 1.25rem;
+  padding-right: 2.5rem;
+}
+.usuario-modal-name {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0 0 0.4rem;
+}
+.usuario-modal-datos {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+.dato-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+.dato-item span {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+.dato-item strong {
+  font-size: 0.82rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.usuario-modal-totales {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+.modal-total-item {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+  border-radius: 0.7rem;
+  padding: 0.7rem 0.9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+.modal-total-item span:first-child {
+  font-size: 0.67rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+.modal-total-item span:last-child {
+  font-size: 1.1rem;
+  font-weight: 800;
+}
+.modal-balance {
+  border-color: var(--accent);
+  background: var(--accent-bg);
+}
+.usuario-modal-desglose-title {
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  margin: 0 0 0.75rem;
+}
+.usuario-modal-table {
+  font-size: 0.8rem;
+}
+
+/* ══ Responsive ══ */
+@media (max-width: 1200px) {
+  .cards,
+  .negocio-metricas {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+@media (max-width: 1000px) {
+  .modalidad-cards {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 900px) {
+  .negocio-resumen {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .negocio-detalle {
+    grid-template-columns: 1fr;
+  }
+  .usuario-modal-datos {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (max-width: 768px) {
+  .negocio {
+    padding: 1.2rem 0.75rem;
+  }
+  .cards,
+  .negocio-metricas {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (max-width: 600px) {
+  .negocio-resumen {
+    grid-template-columns: 1fr;
+  }
+  .usuario-modal-totales,
+  .usuario-modal-datos {
+    grid-template-columns: 1fr;
+  }
+  .table-wrapper {
+    border: none;
+    background: transparent;
+    box-shadow: none;
+    padding: 0;
+  }
+  /* Tablas en modo tarjeta */
+  .ig-table thead {
+    display: none;
+  }
+  .ig-table tbody tr {
+    display: block;
+    margin-bottom: 1rem;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    padding: 0.6rem 0.5rem;
+    background: var(--surface);
+  }
+  .ig-table tbody td {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.3rem 0;
+    border: none;
+    text-align: right;
+  }
+  .ig-table tbody td:before {
+    content: attr(data-label);
+    font-weight: 600;
+    color: var(--text-muted);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    margin-right: 0.5rem;
+    text-align: left;
+    flex-shrink: 0;
+  }
+  .ig-table tfoot td {
+    display: block;
+  }
+}
